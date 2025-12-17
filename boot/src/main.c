@@ -1,5 +1,7 @@
 #include <boot.h>
 #include <boot_info.h>
+#include <gop.h>
+#include <memory_map.h>
 
 EFI_SYSTEM_TABLE  *gST = NULL;
 EFI_BOOT_SERVICES *gBS = NULL;
@@ -19,7 +21,7 @@ void boot_panic(IN CHAR16 *msg) {
 }
 
 EFI_STATUS
-efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
+efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
 
     gST = SystemTable;
@@ -27,6 +29,22 @@ efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     gRT = SystemTable->RuntimeServices;
 
     boot_log(L"[BOOT] UEFI entry OK");
+
+    BootInfo boot_info;
+    ZeroMem(&boot_info, sizeof(BootInfo));
+    
+    // GOP
+    EFI_STATUS status = init_gop(&boot_info.fb);
+    if (EFI_ERROR(status)) {
+        boot_panic(L"[BOOT] GOP init failed");
+    }
+
+    // Memory Map
+    UINTN map_key = 0;
+    status = init_memory_map(&boot_info.mmap, &map_key);
+    if (EFI_ERROR(status)) {
+        boot_panic(L"[BOOT] MemoryMap init failed");
+    }
 
     boot_log(L"[BOOT] Nothing more to do yet.");
     return EFI_SUCCESS;
