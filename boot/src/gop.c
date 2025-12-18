@@ -1,5 +1,6 @@
 #include <boot.h>
 #include <gop.h>
+#include <Library/PrintLib.h>
 
 EFI_STATUS init_gop(BootFramebuffer *fb) {
     EFI_GUID gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;

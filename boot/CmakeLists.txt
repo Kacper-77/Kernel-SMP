@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.16)
+project(bootloader C)
+
+set(CMAKE_C_STANDARD 11)
+
+# Path to EDK2
+set(EDK2_PATH "${CMAKE_SOURCE_DIR}/edk2")
+
+include_directories(
+    ${EDK2_PATH}/MdePkg/Include
+    ${EDK2_PATH}/MdePkg/Include/X64
+    ${EDK2_PATH}/MdePkg/Include/Uefi
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# Compiler flags for UEFI
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffreestanding -fshort-wchar -mno-red-zone -fno-stack-protector")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-unused-parameter")
+
+# Linker flags for UEFI PE32+ executable
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
+    -nostdlib \
+    -Wl,--subsystem,10 \
+    -Wl,--entry,efi_main \
+    -Wl,--image-base,0x100000 \
+")
+
+# Collect all .c files
+file(GLOB BOOTLOADER_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+)
+
+add_executable(BOOTX64.efi ${BOOTLOADER_SOURCES})

@@ -2,6 +2,9 @@
 #include <boot_info.h>
 #include <gop.h>
 #include <memory_map.h>
+#include <acpi.h>
+
+#include <Library/BaseMemoryLib.h>
 
 EFI_SYSTEM_TABLE  *gST = NULL;
 EFI_BOOT_SERVICES *gBS = NULL;
@@ -22,8 +25,6 @@ void boot_panic(IN CHAR16 *msg) {
 
 EFI_STATUS
 efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
-    InitializeLib(ImageHandle, SystemTable);
-
     gST = SystemTable;
     gBS = SystemTable->BootServices;
     gRT = SystemTable->RuntimeServices;
@@ -39,12 +40,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         boot_panic(L"[BOOT] GOP init failed");
     }
 
-    // Memory Map
-    UINTN map_key = 0;
-    status = init_memory_map(&boot_info.mmap, &map_key);
+    // ACPI RSDP
+    status = init_acpi(&boot_info.acpi);
     if (EFI_ERROR(status)) {
-        boot_panic(L"[BOOT] MemoryMap init failed");
+        boot_panic(L"[BOOT] ACPI init failed");
     }
+
+    // Memory Map + Exit
+    status = final_memory_map_and_exit(&boot_info.mmap, ImageHandle);
 
     boot_log(L"[BOOT] Nothing more to do yet.");
     return EFI_SUCCESS;
