@@ -1,18 +1,29 @@
 #include <Uefi.h>
 #include <Library/UefiLib.h>
 #include <Protocol/LoadedImage.h>
+#include <Protocol/SimpleFileSystem.h>
 #include <Library/UefiBootServicesTableLib.h>
 
 #include <boot.h>
 #include <boot_info.h>
 #include <kernel_loader.h>
 
-//
-// Minimal ELF64 structures for x86_64 kernel loading
-//
+#include <stddef.h>
+
+void SetMem(void *dst, size_t size, unsigned char value) {
+    unsigned char *p = (unsigned char*)dst;
+    while (size--) {
+        *p++ = value;
+    }
+}
+
 #define EI_NIDENT 16
 #define PT_LOAD   1
 #define EM_X86_64 62
+#define ET_EXEC   2
+#define ET_DYN    3
+
+typedef unsigned long long UINT64;
 
 typedef struct {
     UINT8  e_ident[EI_NIDENT];
@@ -42,67 +53,54 @@ typedef struct {
     UINT64 p_align;
 } Elf64_Phdr;
 
-//
-// Open the kernel file from the same device the bootloader was loaded from.
-// For now, we assume the path is "\\kernel.elf" on the ESP.
-//
-static EFI_STATUS open_kernel_file(EFI_HANDLE ImageHandle, EFI_FILE_PROTOCOL **out_file) {
+static EFI_STATUS open_kernel_file(
+    EFI_HANDLE ImageHandle,
+    EFI_FILE_PROTOCOL **out_root,
+    EFI_FILE_PROTOCOL **out_file
+) {
     EFI_STATUS Status;
-    EFI_LOADED_IMAGE_PROTOCOL *LoadedImage;
-    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
-    EFI_FILE_PROTOCOL *Root;
-    EFI_FILE_PROTOCOL *KernelFile;
+    EFI_LOADED_IMAGE_PROTOCOL *LoadedImage = NULL;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem = NULL;
+    EFI_FILE_PROTOCOL *Root = NULL;
+    EFI_FILE_PROTOCOL *KernelFile = NULL;
 
-    // Get info about the current loaded image (the bootloader)
-    Status = gBS->HandleProtocol(
-        ImageHandle,
-        &gEfiLoadedImageProtocolGuid,
-        (VOID**)&LoadedImage
-    );
-    if (EFI_ERROR(Status)) {
+    Status = gBS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
+    if (EFI_ERROR(Status) || LoadedImage == NULL) {
         boot_panic(L"[KERNEL] HandleProtocol(LoadedImage) failed");
-        return Status;
+        return EFI_DEVICE_ERROR;
     }
 
-    // Get the filesystem from the device the bootloader was loaded from
-    Status = gBS->HandleProtocol(
-        LoadedImage->DeviceHandle,
-        &gEfiSimpleFileSystemProtocolGuid,
-        (VOID**)&FileSystem
-    );
-    if (EFI_ERROR(Status)) {
+    Status = gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
+    if (EFI_ERROR(Status) || FileSystem == NULL) {
         boot_panic(L"[KERNEL] HandleProtocol(SimpleFileSystem) failed");
-        return Status;
+        return EFI_DEVICE_ERROR;
     }
 
-    // Open the root directory of the filesystem (ESP)
     Status = FileSystem->OpenVolume(FileSystem, &Root);
-    if (EFI_ERROR(Status)) {
+    if (EFI_ERROR(Status) || Root == NULL) {
         boot_panic(L"[KERNEL] OpenVolume failed");
-        return Status;
+        return EFI_DEVICE_ERROR;
     }
 
-    // Open the kernel file
     Status = Root->Open(
         Root,
         &KernelFile,
-        L"\\kernel.elf",  // !!! PATH !!!
+        L"\\kernel.elf",
         EFI_FILE_MODE_READ,
         0
     );
-    if (EFI_ERROR(Status)) {
+    if (EFI_ERROR(Status) || KernelFile == NULL) {
         boot_panic(L"[KERNEL] Failed to open \\kernel.elf");
-        return Status;
+
+        Root->Close(Root);
+        return EFI_NOT_FOUND;
     }
 
+    *out_root = Root;
     *out_file = KernelFile;
     return EFI_SUCCESS;
 }
 
-//
-// Load an ELF64 kernel image into memory at its physical addresses.
-// We assume the kernel is linked for physical addresses (p_paddr).
-//
 static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel) {
     EFI_STATUS Status;
     Elf64_Ehdr Ehdr;
@@ -115,36 +113,35 @@ static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel
         return EFI_LOAD_ERROR;
     }
 
-    // Basic ELF64 / x86_64 validation
-    if (Ehdr.e_ident[0] != 0x7F ||
-        Ehdr.e_ident[1] != 'E' ||
-        Ehdr.e_ident[2] != 'L' ||
-        Ehdr.e_ident[3] != 'F') {
+    // Validate
+    if (Ehdr.e_ident[0] != 0x7F || Ehdr.e_ident[1] != 'E' || Ehdr.e_ident[2] != 'L' || Ehdr.e_ident[3] != 'F') {
         boot_panic(L"[KERNEL] Invalid ELF magic");
         return EFI_UNSUPPORTED;
     }
-
     if (Ehdr.e_machine != EM_X86_64) {
         boot_panic(L"[KERNEL] ELF is not x86_64");
         return EFI_UNSUPPORTED;
     }
+    if (Ehdr.e_phentsize != sizeof(Elf64_Phdr) || Ehdr.e_phnum == 0) {
+        boot_panic(L"[KERNEL] Invalid program header layout");
+        return EFI_UNSUPPORTED;
+    }
+    if (Ehdr.e_type != ET_EXEC && Ehdr.e_type != ET_DYN) {
+        boot_panic(L"[KERNEL] Unsupported ELF type (expect ET_EXEC/ET_DYN)");
+        return EFI_UNSUPPORTED;
+    }
 
     // Read program headers
-    UINTN PhSize = Ehdr.e_phentsize * Ehdr.e_phnum;
+    UINTN PhSize = (UINTN)Ehdr.e_phentsize * (UINTN)Ehdr.e_phnum;
     Elf64_Phdr *Phdrs = NULL;
-
     Status = gBS->AllocatePool(EfiLoaderData, PhSize, (VOID**)&Phdrs);
     if (EFI_ERROR(Status) || Phdrs == NULL) {
         boot_panic(L"[KERNEL] AllocatePool for program headers failed");
-        return Status;
+        return EFI_OUT_OF_RESOURCES;
     }
 
     Status = File->SetPosition(File, Ehdr.e_phoff);
-    if (EFI_ERROR(Status)) {
-        boot_panic(L"[KERNEL] SetPosition to program headers failed");
-        gBS->FreePool(Phdrs);
-        return Status;
-    }
+    if (EFI_ERROR(Status)) { gBS->FreePool(Phdrs); return Status; }
 
     Size = PhSize;
     Status = File->Read(File, &Size, Phdrs);
@@ -154,117 +151,94 @@ static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel
         return EFI_LOAD_ERROR;
     }
 
-    // Determine the physical address range covering all PT_LOAD segments
-    UINT64 MinAddr = (UINT64)-1;
-    UINT64 MaxAddr = 0;
-
+    // Compute virtual range [lo, hi) across PT_LOAD segments
+    UINT64 lo = ~(UINT64)0;
+    UINT64 hi = 0;
     for (UINT16 i = 0; i < Ehdr.e_phnum; ++i) {
         Elf64_Phdr *Ph = &Phdrs[i];
-        if (Ph->p_type != PT_LOAD) {
-            continue;
-        }
-
-        if (Ph->p_paddr < MinAddr) {
-            MinAddr = Ph->p_paddr;
-        }
-
-        UINT64 End = Ph->p_paddr + Ph->p_memsz;
-        if (End > MaxAddr) {
-            MaxAddr = End;
-        }
+        if (Ph->p_type != PT_LOAD || Ph->p_memsz == 0) continue;
+        if (Ph->p_vaddr < lo) lo = Ph->p_vaddr;
+        UINT64 end = Ph->p_vaddr + Ph->p_memsz;
+        if (end > hi) hi = end;
     }
-
-    if (MinAddr == (UINT64)-1 || MaxAddr <= MinAddr) {
+    if (lo == ~(UINT64)0 || hi <= lo) {
         boot_panic(L"[KERNEL] No loadable PT_LOAD segments found");
         gBS->FreePool(Phdrs);
         return EFI_LOAD_ERROR;
     }
 
-    UINT64 KernelPhysBase = MinAddr;
-    UINT64 KernelSize     = MaxAddr - MinAddr;
-    UINTN  Pages          = EFI_SIZE_TO_PAGES(KernelSize);
-    EFI_PHYSICAL_ADDRESS AllocAddr = KernelPhysBase;
+    UINT64 imageSize = hi - lo;
+    UINTN pages = EFI_SIZE_TO_PAGES(imageSize);
 
-    // Allocate pages exactly at the physical address range required by the kernel
-    // This assumes the kernel is linked for those physical addresses.
-    EFI_STATUS allocStatus = gBS->AllocatePages(
-        AllocateAddress,
-        EfiLoaderCode,
-        Pages,
-        &AllocAddr
-    );
-    if (EFI_ERROR(allocStatus)) {
-        boot_panic(L"[KERNEL] AllocatePages for kernel image failed");
+    // Allocate pages anywhere, then relocate relative to lo
+    EFI_PHYSICAL_ADDRESS image_base = 0;
+    Status = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, pages, &image_base);
+    if (EFI_ERROR(Status)) {
+        boot_panic(L"[KERNEL] AllocatePages (AnyPages) failed");
         gBS->FreePool(Phdrs);
-        return allocStatus;
+        return Status;
     }
 
-    // Load each PT_LOAD segment into memory
+    UINT8 *dst_base = (UINT8*)(UINTN)image_base;
+
+    // Load segments: copy filesz, zero memsz - filesz
     for (UINT16 i = 0; i < Ehdr.e_phnum; ++i) {
         Elf64_Phdr *Ph = &Phdrs[i];
-        if (Ph->p_type != PT_LOAD) {
-            continue;
-        }
+        if (Ph->p_type != PT_LOAD || Ph->p_memsz == 0) continue;
 
-        VOID   *SegmentDest = (VOID*)(UINTN)Ph->p_paddr;
-        UINT64 FileSz       = Ph->p_filesz;
-        UINT64 MemSz        = Ph->p_memsz;
-
-        // Seek to segment offset in the file
-        Status = File->SetPosition(File, Ph->p_offset);
-        if (EFI_ERROR(Status)) {
-            boot_panic(L"[KERNEL] SetPosition to segment failed");
-            gBS->FreePool(Phdrs);
-            return Status;
-        }
+        UINT8 *seg_dst = dst_base + (Ph->p_vaddr - lo);
 
         // Read file-backed part
-        Size = (UINTN)FileSz;
-        Status = File->Read(File, &Size, SegmentDest);
-        if (EFI_ERROR(Status) || Size != FileSz) {
-            boot_panic(L"[KERNEL] Failed to read segment data");
-            gBS->FreePool(Phdrs);
-            return EFI_LOAD_ERROR;
+        if (Ph->p_filesz > 0) {
+            Status = File->SetPosition(File, Ph->p_offset);
+            if (EFI_ERROR(Status)) { gBS->FreePool(Phdrs); return Status; }
+
+            UINTN to_read = (UINTN)Ph->p_filesz;
+            Status = File->Read(File, &to_read, seg_dst);
+            if (EFI_ERROR(Status) || to_read != Ph->p_filesz) {
+                boot_panic(L"[KERNEL] Failed to read segment data");
+                gBS->FreePool(Phdrs);
+                return EFI_LOAD_ERROR;
+            }
         }
 
-        // Zero the remaining (BSS) if p_memsz > p_filesz
-        if (MemSz > FileSz) {
-            UINT8 *bss      = (UINT8*)SegmentDest + FileSz;
-            UINT64 bss_size = MemSz - FileSz;
-            for (UINT64 j = 0; j < bss_size; ++j) {
-                bss[j] = 0;
-            }
+        // Zero BSS
+        if (Ph->p_memsz > Ph->p_filesz) {
+            SetMem(seg_dst + Ph->p_filesz, (UINTN)(Ph->p_memsz - Ph->p_filesz), 0);
         }
     }
 
     gBS->FreePool(Phdrs);
 
-    // Fill BootKernel structure
-    outKernel->kernel_base  = (VOID*)(UINTN)KernelPhysBase;
-    outKernel->kernel_size  = (UINTN)KernelSize;
-    outKernel->kernel_entry = (VOID*)(UINTN)Ehdr.e_entry;
+    // Fill BootKernel: entry relocated relative to lo
+    outKernel->kernel_base  = (VOID*)(UINTN)image_base;
+    outKernel->kernel_size  = (UINTN)imageSize;
+    outKernel->kernel_entry = (VOID*)(UINTN)(dst_base + (Ehdr.e_entry - lo));
 
-    boot_log(L"[KERNEL] ELF kernel loaded successfully");
+    boot_log(L"[KERNEL] ELF kernel loaded (AnyPages + relocated)");
     return EFI_SUCCESS;
 }
 
-//
-// Public entry for kernel loading:
-// - open filesystem
-// - open kernel.elf
-// - load ELF64 into memory
-// - fill BootKernel
-//
 EFI_STATUS init_kernel(EFI_HANDLE ImageHandle, BootKernel *kernel) {
     EFI_STATUS Status;
+    EFI_FILE_PROTOCOL *Root = NULL;
     EFI_FILE_PROTOCOL *KernelFile = NULL;
 
-    Status = open_kernel_file(ImageHandle, &KernelFile);
+    Status = open_kernel_file(ImageHandle, &Root, &KernelFile);
     if (EFI_ERROR(Status)) {
         return Status;
     }
 
     Status = load_kernel_elf(KernelFile, kernel);
+
+    // Close file handles before EBS
+    if (KernelFile) {
+        KernelFile->Close(KernelFile);
+    }
+    if (Root) {
+        Root->Close(Root);
+    }
+
     if (EFI_ERROR(Status)) {
         return Status;
     }

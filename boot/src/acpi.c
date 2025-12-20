@@ -1,7 +1,9 @@
-#include <boot.h>
-#include <acpi.h>
+#include <Uefi.h>
 #include <Guid/Acpi.h>
 #include <Library/BaseMemoryLib.h> 
+
+#include <boot.h>
+#include <acpi.h>
 
 EFI_STATUS init_acpi(BootAcpi *acpi) {
     EFI_CONFIGURATION_TABLE *config_table = gST->ConfigurationTable;

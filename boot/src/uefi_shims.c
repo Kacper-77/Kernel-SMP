@@ -3,7 +3,7 @@
 
 //
 // Minimal implementations to avoid linking full EDK2 libs
-// Only what your bootloader actually needs.
+// Only what bootloader actually needs
 //
 
 //

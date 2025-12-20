@@ -1,6 +1,8 @@
+#include <Uefi.h>
+#include <Library/PrintLib.h>
+
 #include <boot.h>
 #include <gop.h>
-#include <Library/PrintLib.h>
 
 EFI_STATUS init_gop(BootFramebuffer *fb) {
     EFI_GUID gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
@@ -18,6 +20,12 @@ EFI_STATUS init_gop(BootFramebuffer *fb) {
     fb->width               = info->HorizontalResolution;
     fb->height              = info->VerticalResolution;
     fb->pixels_per_scanline = info->PixelsPerScanLine;
+
+    fb->format         = info->PixelFormat;
+    fb->red_mask       = info->PixelInformation.RedMask;
+    fb->green_mask     = info->PixelInformation.GreenMask;
+    fb->blue_mask      = info->PixelInformation.BlueMask;
+    fb->reserved_mask  = info->PixelInformation.ReservedMask;
 
     boot_log(L"[GOP] Graphics Output Protocol OK");
 

@@ -1,10 +1,6 @@
-#include <boot.h>
-#include <boot_info.h>
-#include <gop.h>
-#include <memory_map.h>
-#include <acpi.h>
-
+#include <Uefi.h>
 #include <Library/BaseMemoryLib.h>
+#include <Protocol/GraphicsOutput.h>
 
 EFI_SYSTEM_TABLE  *gST = NULL;
 EFI_BOOT_SERVICES *gBS = NULL;
@@ -24,31 +20,26 @@ void boot_panic(IN CHAR16 *msg) {
 }
 
 EFI_STATUS
+__attribute__((ms_abi))
 efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     gST = SystemTable;
     gBS = SystemTable->BootServices;
     gRT = SystemTable->RuntimeServices;
 
+    if (gST && gST->ConOut) {
+        gST->ConOut->Reset(gST->ConOut, TRUE);
+        gST->ConOut->ClearScreen(gST->ConOut);
+        gST->ConOut->OutputString(gST->ConOut, L"[BOOT] console ready\r\n");
+    }
+
     boot_log(L"[BOOT] UEFI entry OK");
 
-    BootInfo boot_info;
-    ZeroMem(&boot_info, sizeof(BootInfo));
-    
-    // GOP
-    EFI_STATUS status = init_gop(&boot_info.fb);
-    if (EFI_ERROR(status)) {
-        boot_panic(L"[BOOT] GOP init failed");
-    }
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop = NULL;
+    EFI_STATUS s = gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (void**)&Gop);
+    if (EFI_ERROR(s) || !Gop) boot_panic(L"[BOOT] GOP locate failed");
 
-    // ACPI RSDP
-    status = init_acpi(&boot_info.acpi);
-    if (EFI_ERROR(status)) {
-        boot_panic(L"[BOOT] ACPI init failed");
-    }
+    boot_log(L"[BOOT] drew red pre-EBS");
 
-    // Memory Map + Exit
-    status = final_memory_map_and_exit(&boot_info.mmap, ImageHandle);
-
-    boot_log(L"[BOOT] Nothing more to do yet.");
+    for (;;) { }
     return EFI_SUCCESS;
 }

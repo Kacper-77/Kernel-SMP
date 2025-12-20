@@ -1,2 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
 project(kernel C)
+
+set(CMAKE_C_STANDARD 11)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
+    -ffreestanding -mno-red-zone -fno-stack-protector -fno-pie \
+    -Wall -Wextra")
+
+file(GLOB KERNEL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+
+add_executable(kernel.elf ${KERNEL_SOURCES})
+
+set_target_properties(kernel.elf PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/esp
+    OUTPUT_NAME "kernel"
+)
+
+set(KERNEL_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/linker.ld)
+target_link_options(kernel.elf PRIVATE
+    -nostdlib
+    -T ${KERNEL_LINKER_SCRIPT}
+)

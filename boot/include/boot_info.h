@@ -14,6 +14,13 @@ typedef struct {
     UINT32  width;               // Horizontal resolution in pixels
     UINT32  height;              // Vertical resolution in pixels
     UINT32  pixels_per_scanline; // Number of pixels per row (pitch)
+
+    // Pixel format and masks to avoid guessing in the kernel
+    UINT32  format;                // EFI_GRAPHICS_PIXEL_FORMAT
+    UINT32  red_mask;
+    UINT32  green_mask;
+    UINT32  blue_mask;
+    UINT32  reserved_mask;
 } BootFramebuffer;
 
 //
