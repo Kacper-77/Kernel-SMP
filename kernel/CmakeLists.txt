@@ -3,21 +3,33 @@ project(kernel C)
 
 set(CMAKE_C_STANDARD 11)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
-    -ffreestanding -mno-red-zone -fno-stack-protector -fno-pie \
-    -Wall -Wextra")
+# Linking LLD
+set(LD_LLD_PATH "/opt/homebrew/bin/ld.lld")
 
-file(GLOB KERNEL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+# Flags
+set(CMAKE_C_FLAGS "-target x86_64-unknown-elf -ffreestanding -mno-red-zone -fno-stack-protector -fno-pie -Wall -Wextra")
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+file(GLOB KERNEL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+
+# Add executable file
 add_executable(kernel.elf ${KERNEL_SOURCES})
 
+# Exit settings
 set_target_properties(kernel.elf PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/esp
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/esp"
     OUTPUT_NAME "kernel"
+    SUFFIX ".elf"
 )
 
-set(KERNEL_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/linker.ld)
-target_link_options(kernel.elf PRIVATE
-    -nostdlib
-    -T ${KERNEL_LINKER_SCRIPT}
+# Linker path
+set(KERNEL_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/linker.ld")
+
+# MacOS default libs and paths disabled
+set(CMAKE_C_LINK_EXECUTABLE "${LD_LLD_PATH} <OBJECTS> -o <TARGET> -T ${KERNEL_LINKER_SCRIPT} -static -nostdlib")
+
+# Properties
+set_target_properties(kernel.elf PROPERTIES 
+    LINKER_LANGUAGE C
+    LINK_DEPENDS "${KERNEL_LINKER_SCRIPT}"
 )

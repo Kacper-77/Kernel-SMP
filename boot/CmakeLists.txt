@@ -4,7 +4,13 @@ project(boot C)
 set(CMAKE_C_STANDARD 11)
 
 # Flags for Clang
-set(CMAKE_C_FLAGS "-target x86_64-unknown-windows -ffreestanding -fshort-wchar -mno-red-zone -DEFI_X64 -DGNU_EFI_USE_MS_ABI -Wall -Wextra")
+set(CMAKE_C_FLAGS "-target x86_64-unknown-windows \
+    -ffreestanding                                \
+    -fshort-wchar                                 \
+    -mno-red-zone                                 \
+    -DEFI_X64                                     \
+    -DGNU_EFI_USE_MS_ABI                          \
+    -Wall -Wextra")
 
 set(EDK2_PATH "${CMAKE_SOURCE_DIR}/edk2")
 include_directories(
@@ -13,6 +19,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Bootloader sources
 file(GLOB BOOTLOADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 
 # Build EFI 
@@ -26,7 +33,8 @@ set_target_properties(BOOTX64.efi PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/esp/EFI/BOOT"
 )
 
-set(LLD_LINK_PATH "/opt/homebrew/opt/lld/bin/lld-link")
+# Linking LLD
+set(LD_LLD_PATH "/opt/homebrew/bin/ld.lld")
 
 # Link to EFI
 target_link_options(BOOTX64.efi PRIVATE
