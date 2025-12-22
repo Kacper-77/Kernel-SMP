@@ -25,3 +25,13 @@ void kprint(const char* s) {
         write_serial(*s++);
     }
 }
+
+void kprint_hex(uint64_t value) {
+    char hex_chars[] = "0123456789ABCDEF";
+    kprint("0x");
+
+    for (int i = 15; i >= 0; i--) {
+        uint8_t nibble = (value >> (i * 4)) & 0xF;
+        write_serial(hex_chars[nibble]);
+    }
+}

@@ -24,6 +24,9 @@ void debug_print(const char* s) {
 __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *info) {
     init_serial();
+    kprint("Kernel base address: ");
+    kprint_hex((uintptr_t)kernel_main);
+    kprint("\n");
     kprint("Checking ACPI...\n");
 
     uint32_t rm = info->fb.red_mask;

@@ -17,5 +17,6 @@ void init_serial();
 int is_transmit_empty();
 void write_serial(char a);
 void kprint(const char* s);
+void kprint_hex(uint64_t value);
 
 #endif
