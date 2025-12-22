@@ -3,7 +3,7 @@ OUTPUT_ARCH(i386:x86-64)
 ENTRY(kernel_main)
 
 SECTIONS {
-    . = 0x00100000;
+    . = 0x2000000;
 
     .text : ALIGN(0x1000) {
         KEEP(*(.text.entry))

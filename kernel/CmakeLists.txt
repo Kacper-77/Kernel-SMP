@@ -7,7 +7,7 @@ set(CMAKE_C_STANDARD 11)
 set(LD_LLD_PATH "/opt/homebrew/bin/ld.lld")
 
 # Flags
-set(CMAKE_C_FLAGS "-target x86_64-unknown-elf -ffreestanding -mno-red-zone -fno-stack-protector -fno-pie -Wall -Wextra")
+set(CMAKE_C_FLAGS "-target x86_64-unknown-elf -ffreestanding -mcmodel=large -mno-red-zone -fno-stack-protector -Wall -Wextra")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 file(GLOB KERNEL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")

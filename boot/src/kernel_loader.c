@@ -171,15 +171,15 @@ static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel
     UINTN pages = EFI_SIZE_TO_PAGES(imageSize);
 
     // Allocate pages anywhere, then relocate relative to lo
-    EFI_PHYSICAL_ADDRESS image_base = 0;
-    Status = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, pages, &image_base);
+    EFI_PHYSICAL_ADDRESS kernel_addr = lo;
+    Status = gBS->AllocatePages(AllocateAddress, EfiLoaderCode, pages, &kernel_addr);
     if (EFI_ERROR(Status)) {
         boot_panic(L"[KERNEL] AllocatePages (AnyPages) failed");
         gBS->FreePool(Phdrs);
         return Status;
     }
 
-    UINT8 *dst_base = (UINT8*)(UINTN)image_base;
+    UINT8 *dst_base = (UINT8*)(UINTN)kernel_addr;
 
     // Load segments: copy filesz, zero memsz - filesz
     for (UINT16 i = 0; i < Ehdr.e_phnum; ++i) {
@@ -211,7 +211,7 @@ static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel
     gBS->FreePool(Phdrs);
 
     // Fill BootKernel: entry relocated relative to lo
-    outKernel->kernel_base  = (VOID*)(UINTN)image_base;
+    outKernel->kernel_base  = (VOID*)(UINTN)kernel_addr;
     outKernel->kernel_size  = (UINTN)imageSize;
     outKernel->kernel_entry = (VOID*)(UINTN)(dst_base + (Ehdr.e_entry - lo));
 

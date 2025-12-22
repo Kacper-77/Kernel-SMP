@@ -1,6 +1,7 @@
 #include <boot_info.h>
 #include <serial.h>
 #include <acpi.h>
+
 #include <stdint.h>
 #include <stddef.h>
 
@@ -11,8 +12,20 @@ static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
     return ((uint32_t)r << rs) | ((uint32_t)g << gs) | ((uint32_t)b << bs);
 }
 
+void debug_putc(char c) {
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)c), "Nd"((uint16_t)0xE9));
+    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)c), "Nd"((uint16_t)0x3F8));
+}
+
+void debug_print(const char* s) {
+    while(*s) debug_putc(*s++);
+}
+
 __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *info) {
+    init_serial();
+    kprint("Checking ACPI...\n");
+
     uint32_t rm = info->fb.red_mask;
     uint32_t gm = info->fb.green_mask;
     uint32_t bm = info->fb.blue_mask;
@@ -22,6 +35,7 @@ void kernel_main(BootInfo *info) {
     uint32_t cpu_count = 0;
 
     if (info->acpi.rsdp != 0) {
+        kprint("Found RSDP, opening RSDT...\n");
         acpi_rsdp_t *rsdp = (acpi_rsdp_t *)(uintptr_t)info->acpi.rsdp;
         acpi_rsdt_t *rsdt = (acpi_rsdt_t *)(uintptr_t)rsdp->rsdt_address;
         
@@ -36,6 +50,8 @@ void kernel_main(BootInfo *info) {
 
             if (table->signature[0] == 'A' && table->signature[1] == 'P' && 
                 table->signature[2] == 'I' && table->signature[3] == 'C') {
+
+                kprint("Found MADT! Parsing CPUs...\n");
                 
                 // Gold square for MADT
                 uint32_t gold = pack_rgb(255, 215, 0, rm, gm, bm);
@@ -67,5 +83,6 @@ void kernel_main(BootInfo *info) {
         }
     }
 
+    kprint("Kernel is now idling.\n");
     for (;;) { __asm__ __volatile__("hlt"); }
 }
