@@ -1,6 +1,8 @@
 #include <boot_info.h>
 #include <serial.h>
 #include <acpi.h>
+#include <gdt.h>
+#include <idt.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -16,10 +18,20 @@ static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
 __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *info) {
     init_serial();
-    kprint("Kernel base address: ");
-    kprint_hex((uintptr_t)kernel_main);
-    kprint("\n");
-    kprint("Checking ACPI...\n");
+    kprint("--- Kernel Boot Sequence ---\n");
+
+    gdt_init();
+    kprint("GDT initialized.\n");
+
+    idt_init();
+    kprint("IDT initialized.\n");
+
+    // TEST IDT
+    kprint("Testing IDT: Dividing by zero now...\n");
+    
+    volatile int a = 10;
+    volatile int b = 0;
+    volatile int c = a / b;
 
     uint32_t rm = info->fb.red_mask;
     uint32_t gm = info->fb.green_mask;
