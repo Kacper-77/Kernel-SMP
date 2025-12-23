@@ -12,14 +12,6 @@ static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
     return ((uint32_t)r << rs) | ((uint32_t)g << gs) | ((uint32_t)b << bs);
 }
 
-void debug_putc(char c) {
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)c), "Nd"((uint16_t)0xE9));
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)c), "Nd"((uint16_t)0x3F8));
-}
-
-void debug_print(const char* s) {
-    while(*s) debug_putc(*s++);
-}
 
 __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *info) {
