@@ -22,7 +22,7 @@ typedef struct {
 } BootFramebuffer;
 
 typedef struct {
-    void   *memory_map;
+    void    *memory_map;
     uint64_t memory_map_size;
     uint64_t descriptor_size;
     uint32_t descriptor_version;
@@ -33,8 +33,8 @@ typedef struct {
 } BootAcpi;
 
 typedef struct {
-    void   *kernel_entry;
-    void   *kernel_base;
+    void    *kernel_entry;
+    void    *kernel_base;
     uint64_t kernel_size;
 } BootKernel;
 
@@ -44,5 +44,16 @@ typedef struct {
     BootAcpi        acpi;
     BootKernel      kernel;
 } BootInfo;
+
+//
+// PMM struct
+//
+typedef struct {
+    uint32_t type;
+    uint64_t physical_start;
+    uint64_t virtual_start;
+    uint64_t num_pages;
+    uint64_t attribute;
+} EFI_MEMORY_DESCRIPTOR;
 
 #endif

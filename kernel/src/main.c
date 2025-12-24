@@ -3,6 +3,7 @@
 #include <acpi.h>
 #include <gdt.h>
 #include <idt.h>
+#include <pmm.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -26,12 +27,31 @@ void kernel_main(BootInfo *info) {
     idt_init();
     kprint("IDT initialized.\n");
 
-    // TEST IDT
-    kprint("Testing IDT: Dividing by zero now...\n");
+    pmm_init(info);
+    kprint("PMM initialized.\n");
+
+    // TEST PMM
+    kprint("Testing PMM...\n");
+    void* frame1 = pmm_alloc_frame();
+    void* frame2 = pmm_alloc_frame();
+    void* frame3 = pmm_alloc_frame();
+
+    kprint("Allocated frame 1: "); kprint_hex((uintptr_t)frame1); kprint("\n");
+    kprint("Allocated frame 2: "); kprint_hex((uintptr_t)frame2); kprint("\n");
+    kprint("Allocated frame 3: "); kprint_hex((uintptr_t)frame3); kprint("\n");
+
+    pmm_free_frame(frame2);
+    kprint("Freed frame 2.\n");
+
+    void* frame4 = pmm_alloc_frame();
+    kprint("Allocated frame 4 (should be same as 2): "); kprint_hex((uintptr_t)frame4); kprint("\n");
+
+    // // TEST IDT
+    // kprint("Testing IDT: Dividing by zero now...\n");
     
-    volatile int a = 10;
-    volatile int b = 0;
-    volatile int c = a / b;
+    // volatile int a = 10;
+    // volatile int b = 0;
+    // volatile int c = a / b;
 
     uint32_t rm = info->fb.red_mask;
     uint32_t gm = info->fb.green_mask;

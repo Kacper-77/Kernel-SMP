@@ -11,12 +11,12 @@ void exception_handler(interrupt_frame_t* frame) {
     kprint("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     kprint("!!!          CPU EXCEPTION         !!!\n");
     kprint("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-    kprint("Vector: "); kprint_hex(frame->vector_number);
+    kprint("Vector: ");        kprint_hex(frame->vector_number);
     kprint(" | Error Code: "); kprint_hex(frame->error_code);
-    kprint("\nRIP:    "); kprint_hex(frame->rip);
-    kprint("\nRAX:    "); kprint_hex(frame->rax);
-    kprint(" | RBX: "); kprint_hex(frame->rbx);
-    kprint("\nStack at: "); kprint_hex(frame->rsp);
+    kprint("\nRIP:    ");      kprint_hex(frame->rip);
+    kprint("\nRAX:    ");      kprint_hex(frame->rax);
+    kprint(" | RBX: ");        kprint_hex(frame->rbx);
+    kprint("\nStack at: ");    kprint_hex(frame->rsp);
     kprint("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     
     for(;;); // System halted
