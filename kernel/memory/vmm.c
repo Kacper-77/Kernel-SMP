@@ -13,6 +13,15 @@ void* memset(void* dest, int ch, size_t count) {
 }
 
 //
+// Invalidates a single page in the TLB (Translation Lookaside Buffer).
+// Must be called after changing an existing mapping to ensure the CPU
+// doesn't use stale data from its internal cache.
+//
+static inline void vmm_invlpg(void* addr) {
+    __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
+//
 // Maps a virtual page to a physical frame.
 // If intermediate tables don't exist, they are allocated using PMM.
 //
@@ -54,6 +63,45 @@ void vmm_map(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t flags) {
 }
 
 //
+// Performs a "Page Walk" to translate a virtual address to its physical counterpart.
+// Returns the physical address or 0 if the page is not mapped.
+//
+uint64_t vmm_virtual_to_physical(page_table_t* pml4, uint64_t virt) {
+    uint64_t addr_mask = 0x000FFFFFFFFFF000ULL;
+
+    // Traverse the 4-level page table hierarchy
+    if (!(pml4->entries[PML4_IDX(virt)] & PTE_PRESENT)) return 0;
+    page_table_t* pdpt = (page_table_t*)(pml4->entries[PML4_IDX(virt)] & addr_mask);
+
+    if (!(pdpt->entries[PDPT_IDX(virt)] & PTE_PRESENT)) return 0;
+    page_table_t* pd = (page_table_t*)(pdpt->entries[PDPT_IDX(virt)] & addr_mask);
+
+    if (!(pd->entries[PD_IDX(virt)] & PTE_PRESENT)) return 0;
+    page_table_t* pt = (page_table_t*)(pd->entries[PD_IDX(virt)] & addr_mask);
+
+    if (!(pt->entries[PT_IDX(virt)] & PTE_PRESENT)) return 0;
+
+    // Physical address = (address from PT entry) + (12-bit offset from virtual address)
+    return (pt->entries[PT_IDX(virt)] & addr_mask) + (virt & 0xFFF);
+}
+
+//
+// Maps a contiguous range of virtual pages to a contiguous range of physical frames.
+// Automatically handles TLB invalidation for the entire range.
+//
+void vmm_map_range(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t size, uint64_t flags) {
+    uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    
+    for (uint64_t i = 0; i < num_pages; i++) {
+        uint64_t v_addr = virt + (i * PAGE_SIZE);
+        uint64_t p_addr = phys + (i * PAGE_SIZE);
+        
+        vmm_map(pml4, v_addr, p_addr, flags);
+        vmm_invlpg((void*)v_addr);
+    }
+}
+
+//
 // Initializes paging by creating a new PML4, identity mapping critical regions,
 // and performing the switch via CR3 and segment reloading.
 //
@@ -82,10 +130,7 @@ void vmm_init(BootInfo* bi) {
     // 3. Identity Map the Framebuffer
     uint64_t fb_start = (uint64_t)bi->fb.framebuffer_base;
     uint64_t fb_size  = bi->fb.framebuffer_size;
-    uint64_t fb_end   = PAGE_ALIGN_UP(fb_start + fb_size);
-    for (uint64_t addr = fb_start; addr < fb_end; addr += PAGE_SIZE) {
-        vmm_map(kernel_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
-    }
+    vmm_map_range(kernel_pml4, fb_start, fb_start, fb_size, PTE_PRESENT | PTE_WRITABLE);
 
     // 4. Identity Map the BootInfo structure
     uint64_t bi_phys = (uint64_t)bi;
@@ -123,9 +168,9 @@ void vmm_init(BootInfo* bi) {
         "lretq\n"
         "1:\n"
         "mov $0x10, %%ax\n"
-        "mov %%ax, %%ds\n"
-        "mov %%ax, %%es\n"
-        "mov %%ax, %%ss\n"
+        "mov %%ax,  %%ds\n"
+        "mov %%ax,  %%es\n"
+        "mov %%ax,  %%ss\n"
         ::: "rax"
     );
     

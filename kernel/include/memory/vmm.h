@@ -37,7 +37,9 @@ typedef struct {
 // Align an address up to page boundary
 #define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFFULL)
 
-void vmm_map(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t flags);
 void vmm_init(BootInfo* bi);
+uint64_t vmm_virtual_to_physical(page_table_t* pml4, uint64_t virt);
+void vmm_map(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t flags);
+void vmm_map_range(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t size, uint64_t flags);
 
 #endif
