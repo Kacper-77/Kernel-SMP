@@ -6,6 +6,9 @@
 
 #define PAGE_SIZE 4096
 
+extern uint8_t* bitmap;
+extern uint64_t bitmap_size;
+
 void pmm_init(BootInfo* boot_info);
 void* pmm_alloc_frame();
 void pmm_free_frame(void* frame);

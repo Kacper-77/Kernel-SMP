@@ -4,6 +4,7 @@
 #include <gdt.h>
 #include <idt.h>
 #include <pmm.h>
+#include <vmm.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -30,8 +31,13 @@ void kernel_main(BootInfo *info) {
     pmm_init(info);
     kprint("PMM initialized.\n");
 
+    // TEST VMM
+    kprint("Initializing VMM (Identity Mapping)...\n");
+    vmm_init(info); 
+    kprint("VMM Active. Paging is now enabled.\n");
+
     // TEST PMM
-    kprint("Testing PMM...\n");
+    kprint("Testing PMM under VMM...\n");
     void* frame1 = pmm_alloc_frame();
     void* frame2 = pmm_alloc_frame();
     void* frame3 = pmm_alloc_frame();
@@ -45,13 +51,6 @@ void kernel_main(BootInfo *info) {
 
     void* frame4 = pmm_alloc_frame();
     kprint("Allocated frame 4 (should be same as 2): "); kprint_hex((uintptr_t)frame4); kprint("\n");
-
-    // // TEST IDT
-    // kprint("Testing IDT: Dividing by zero now...\n");
-    
-    // volatile int a = 10;
-    // volatile int b = 0;
-    // volatile int c = a / b;
 
     uint32_t rm = info->fb.red_mask;
     uint32_t gm = info->fb.green_mask;
