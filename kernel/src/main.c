@@ -5,6 +5,7 @@
 #include <idt.h>
 #include <pmm.h>
 #include <vmm.h>
+#include <apic.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -84,6 +85,15 @@ void kernel_main(BootInfo *info) {
                 for(int y=0; y<40; y++) for(int x=0; x<40; x++) fb[y*stride + x + 250] = gold;
 
                 acpi_madt_t *madt = (acpi_madt_t *)table;
+
+                // LAPIC TEST
+                lapic_init((uint64_t)madt->local_apic_address);
+                
+                uint32_t id = lapic_read(LAPIC_ID);
+                kprint("APIC ID of this CPU: ");
+                kprint_hex(id >> 24);
+                kprint("\n");
+
                 uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
                 uint8_t *end = (uint8_t *)madt + madt->header.length;
 

@@ -176,3 +176,8 @@ void vmm_init(BootInfo* bi) {
     
     kprint("VMM: Paging enabled successfully.\n");
 }
+
+// Getter
+page_table_t* vmm_get_pml4() {
+    return kernel_pml4;
+}
