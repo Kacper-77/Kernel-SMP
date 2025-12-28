@@ -94,6 +94,13 @@ uint64_t vmm_virtual_to_physical(page_table_t* pml4, uint64_t virt) {
 }
 
 //
+// Transform PA -> VA
+//
+void* phys_to_virt(uint64_t phys) {
+    return (void*)(phys - KERNEL_PHYS_BASE + KERNEL_VIRT_BASE);
+}
+
+//
 // Maps a contiguous range of virtual pages to a contiguous range of physical frames.
 // Automatically handles TLB invalidation for the entire range.
 //
@@ -132,32 +139,38 @@ void vmm_init(BootInfo* bi) {
     vmm_map(local_pml4, 0xFEE00000, 0xFEE00000, PTE_PRESENT | PTE_WRITABLE);
 
     // 2. HIGHER HALF KERNEL MAPPING
-    // Map the kernel physical base (0x2000000) to the high virtual base.
-    // NOTE: Using a fixed size (e.g., 16MB) instead of _kernel_end symbols to avoid
-    // accessing high-virtual addresses before the MMU is ready.
-    uint64_t kernel_size_fixed = 0x1000000; // 16 MiB safety margin
-    vmm_map_range(local_pml4, KERNEL_VIRT_BASE, KERNEL_PHYS_BASE, kernel_size_fixed, PTE_PRESENT | PTE_WRITABLE);
+    uint64_t kernel_phys = KERNEL_PHYS_BASE;
+    uint64_t kernel_size = (uint64_t)(_kernel_end - _kernel_start);
+
+    vmm_map_range(local_pml4, KERNEL_VIRT_BASE, kernel_phys, kernel_size,
+                PTE_PRESENT | PTE_WRITABLE);
+
 
     // 3. MAP THE STACK
     // Ensures the current stack remains valid after the switch.
     uint64_t current_rsp;
     __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
     uint64_t stack_page = PAGE_ALIGN_DOWN(current_rsp);
-    for (int i = 0; i < 16; i++) {
-        uint64_t addr = stack_page - (i * PAGE_SIZE);
-        vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
+    int stack_pages = 16;
+
+    for (int i = 0; i < stack_pages; i++) {
+        uint64_t phys_addr = stack_page - (i * PAGE_SIZE);
+        uintptr_t virt_addr = (uintptr_t)phys_to_virt(phys_addr);
+        vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
     // 4. MAP THE FRAMEBUFFER
     // Maps to a high virtual address (0xFFFFFFFF40000000) for the kernel to use.
     uint64_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
     uint64_t fb_size = bi->fb.framebuffer_size;
-    vmm_map_range(local_pml4, 0xFFFFFFFF40000000, fb_phys, fb_size, PTE_PRESENT | PTE_WRITABLE);
+    uintptr_t fb_virt = (uintptr_t)phys_to_virt(fb_phys);
+    vmm_map_range(local_pml4, fb_virt, fb_phys, fb_size, PTE_PRESENT | PTE_WRITABLE);
     
     if (bi->mmap.memory_map) {
         uintptr_t mmap_phys = (uintptr_t)bi->mmap.memory_map;
         uintptr_t mmap_size = bi->mmap.memory_map_size;
-        vmm_map_range(local_pml4, mmap_phys, mmap_phys, mmap_size, PTE_PRESENT);
+        uintptr_t mmap_virt = (uintptr_t)phys_to_virt(mmap_phys);
+        vmm_map_range(local_pml4, mmap_virt, mmap_phys, mmap_size, PTE_PRESENT);
     }
 
     // 5. MAP THE BOOTINFO
