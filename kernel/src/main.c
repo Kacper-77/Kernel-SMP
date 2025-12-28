@@ -51,7 +51,7 @@ void kernel_main_high(BootInfo *info) {
     uint32_t bm = info->fb.blue_mask;
     
     // Using the high virtual address for framebuffer
-    volatile uint32_t *fb = (volatile uint32_t*)phys_to_virt((uint64_t)info->fb.framebuffer_base);
+    volatile uint32_t *fb = (volatile uint32_t*)phys_to_virt((uintptr_t)info->fb.framebuffer_base);
     uint32_t stride = info->fb.pixels_per_scanline;
 
     uint32_t cpu_count = 0;

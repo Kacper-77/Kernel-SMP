@@ -96,8 +96,8 @@ uint64_t vmm_virtual_to_physical(page_table_t* pml4, uint64_t virt) {
 //
 // Transform PA -> VA
 //
-void* phys_to_virt(uint64_t phys) {
-    return (void*)(phys - KERNEL_PHYS_BASE + KERNEL_VIRT_BASE);
+uintptr_t phys_to_virt(uintptr_t phys) {
+    return phys - KERNEL_PHYS_BASE + KERNEL_VIRT_BASE;
 }
 
 //
@@ -155,7 +155,7 @@ void vmm_init(BootInfo* bi) {
 
     for (int i = 0; i < stack_pages; i++) {
         uint64_t phys_addr = stack_page - (i * PAGE_SIZE);
-        uintptr_t virt_addr = (uintptr_t)phys_to_virt(phys_addr);
+        uint64_t virt_addr = phys_to_virt(phys_addr);
         vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
@@ -163,13 +163,13 @@ void vmm_init(BootInfo* bi) {
     // Maps to a high virtual address (0xFFFFFFFF40000000) for the kernel to use.
     uint64_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
     uint64_t fb_size = bi->fb.framebuffer_size;
-    uintptr_t fb_virt = (uintptr_t)phys_to_virt(fb_phys);
+    uint64_t fb_virt = phys_to_virt(fb_phys);
     vmm_map_range(local_pml4, fb_virt, fb_phys, fb_size, PTE_PRESENT | PTE_WRITABLE);
     
     if (bi->mmap.memory_map) {
         uintptr_t mmap_phys = (uintptr_t)bi->mmap.memory_map;
         uintptr_t mmap_size = bi->mmap.memory_map_size;
-        uintptr_t mmap_virt = (uintptr_t)phys_to_virt(mmap_phys);
+        uint64_t mmap_virt = phys_to_virt(mmap_phys);
         vmm_map_range(local_pml4, mmap_virt, mmap_phys, mmap_size, PTE_PRESENT);
     }
 
