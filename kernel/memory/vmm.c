@@ -1,8 +1,16 @@
 #include "vmm.h"
 #include "pmm.h"
-#include <serial.h>
 
 static page_table_t* kernel_pml4 = NULL;
+
+// Symbols from the new linker script
+extern uint8_t _kernel_start[];
+extern uint8_t _kernel_end[];
+
+// Physical address where the kernel is loaded
+#define KERNEL_PHYS_BASE 0x2000000
+// Virtual address where the kernel starts
+#define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
 
 void* memset(void* dest, int ch, size_t count) {
     unsigned char* ptr = (unsigned char*)dest;
@@ -106,37 +114,58 @@ void vmm_map_range(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t si
 // and performing the switch via CR3 and segment reloading.
 //
 void vmm_init(BootInfo* bi) {
-    kernel_pml4 = (page_table_t*)pmm_alloc_frame();
-    if (kernel_pml4 == NULL) {
-        kprint("FATAL: PMM returned NULL for PML4 allocation!\n");
-        for(;;);
-    }
-    memset(kernel_pml4, 0, PAGE_SIZE);
+    // CRITICAL: Use a local pointer (stored on the stack) instead of the global 'kernel_pml4'.
+    // The global variable is located in the .bss section at a high virtual address (0xFFFFFFFF...),
+    // which will cause a Page Fault if accessed before paging is enabled.
+    page_table_t* local_pml4 = (page_table_t*)pmm_alloc_frame();
+    memset(local_pml4, 0, PAGE_SIZE);
 
-    // 1. Identity map the first 512 MiB (Kernel, IDT, GDT etc. are safe)
+    // 1. BOOTSTRAP IDENTITY MAPPING (First 512 MiB)
+    // Necessary to keep the current execution flow alive when CR3 is swapped.
+    // Maps physical 0x0 -> virtual 0x0.
+    // NOTE: will be changed
     for (uint64_t addr = 0; addr < 0x20000000; addr += PAGE_SIZE) {
-        vmm_map(kernel_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
+        vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    // 2. Identity Map the current Stack (16 pages below RSP)
+    // 1.5 MAPPING MMIO
+    vmm_map(local_pml4, 0xFEE00000, 0xFEE00000, PTE_PRESENT | PTE_WRITABLE);
+
+    // 2. HIGHER HALF KERNEL MAPPING
+    // Map the kernel physical base (0x2000000) to the high virtual base.
+    // NOTE: Using a fixed size (e.g., 16MB) instead of _kernel_end symbols to avoid
+    // accessing high-virtual addresses before the MMU is ready.
+    uint64_t kernel_size_fixed = 0x1000000; // 16 MiB safety margin
+    vmm_map_range(local_pml4, KERNEL_VIRT_BASE, KERNEL_PHYS_BASE, kernel_size_fixed, PTE_PRESENT | PTE_WRITABLE);
+
+    // 3. MAP THE STACK
+    // Ensures the current stack remains valid after the switch.
     uint64_t current_rsp;
     __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
     uint64_t stack_page = PAGE_ALIGN_DOWN(current_rsp);
     for (int i = 0; i < 16; i++) {
         uint64_t addr = stack_page - (i * PAGE_SIZE);
-        vmm_map(kernel_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
+        vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    // 3. Identity Map the Framebuffer
-    uint64_t fb_start = (uint64_t)bi->fb.framebuffer_base;
-    uint64_t fb_size  = bi->fb.framebuffer_size;
-    vmm_map_range(kernel_pml4, fb_start, fb_start, fb_size, PTE_PRESENT | PTE_WRITABLE);
+    // 4. MAP THE FRAMEBUFFER
+    // Maps to a high virtual address (0xFFFFFFFF40000000) for the kernel to use.
+    uint64_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
+    uint64_t fb_size = bi->fb.framebuffer_size;
+    vmm_map_range(local_pml4, 0xFFFFFFFF40000000, fb_phys, fb_size, PTE_PRESENT | PTE_WRITABLE);
+    
+    if (bi->mmap.memory_map) {
+        uintptr_t mmap_phys = (uintptr_t)bi->mmap.memory_map;
+        uintptr_t mmap_size = bi->mmap.memory_map_size;
+        vmm_map_range(local_pml4, mmap_phys, mmap_phys, mmap_size, PTE_PRESENT);
+    }
 
-    // 4. Identity Map the BootInfo structure
-    uint64_t bi_phys = (uint64_t)bi;
-    vmm_map(kernel_pml4, PAGE_ALIGN_DOWN(bi_phys), PAGE_ALIGN_DOWN(bi_phys), PTE_PRESENT);
+    // 5. MAP THE BOOTINFO
+    // Ensure the BootInfo structure is accessible after the address space switch.
+    uintptr_t bi_addr = (uintptr_t)bi;
+    vmm_map(local_pml4, PAGE_ALIGN_DOWN(bi_addr), PAGE_ALIGN_DOWN(bi_addr), PTE_PRESENT);
 
-    // 5. Enable NXE in EFER MSR
+    // 6. ENABLE NXE IN EFER MSR (No-Execute Enable)
     __asm__ volatile(
         "mov $0xC0000080, %%ecx\n"
         "rdmsr\n"
@@ -145,36 +174,25 @@ void vmm_init(BootInfo* bi) {
         ::: "ecx", "eax", "edx"
     );
 
-    // 6. Enable PAE in CR4
+    // 7. ENABLE PAE IN CR4
     uint64_t cr4;
     __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
     cr4 |= (1 << 5);
-    __asm__ volatile("mov %%cr4, %0" : : "r"(cr4));
+    __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
 
-    // 7. Temporarily disable Write Protect in CR0
+    // 8. TEMPORARILY DISABLE WP IN CR0
+    // This allows the kernel to initialize tables without immediate protection faults.
     uint64_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 &= ~(1 << 16);
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 
-    // 8. Load CR3 and refresh TLB
-    __asm__ volatile("mov %0, %%cr3" : : "r"(kernel_pml4) : "memory");
+    // 9. LOAD CR3 AND REFRESH TLB
+    // After this instruction, the new memory map is active.
+    __asm__ volatile("mov %0, %%cr3" : : "r"(local_pml4) : "memory");
 
-    // 9. Reload segments to ensure GDT consistency in new address space
-    // Now it's optional but can be useful in future
-    __asm__ volatile (
-        "pushq $0x08\n"
-        "pushq $1f\n"
-        "lretq\n"
-        "1:\n"
-        "mov $0x10, %%ax\n"
-        "mov %%ax,  %%ds\n"
-        "mov %%ax,  %%es\n"
-        "mov %%ax,  %%ss\n"
-        ::: "rax"
-    );
-    
-    kprint("VMM: Paging enabled successfully.\n");
+    // 10. SAFE TO ACCESS GLOBAL VARIABLES NOW
+    kernel_pml4 = local_pml4;
 }
 
 // Getter

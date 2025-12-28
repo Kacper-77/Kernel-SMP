@@ -39,18 +39,14 @@ void gdt_init() {
     // 0x00: Null Descriptor - Always required
     gdt[0] = (struct gdt_entry){0, 0, 0, 0, 0, 0};
 
-    //
     // 0x08: Kernel Code Segment
     // Access 0x9A: 10011010b (Present, Ring 0, Code, Executable, Readable)
     // Granularity 0x20: 00100000b (L-bit set for 64-bit Long Mode)
-    //
     gdt[1] = (struct gdt_entry){0, 0, 0, 0x9A, 0x20, 0};
 
-    //
     // 0x10: Kernel Data Segment
     // Access 0x92: 10010010b (Present, Ring 0, Data, Writable)
     // Granularity 0x00: (L-bit not needed for data)
-    //
     gdt[2] = (struct gdt_entry){0, 0, 0, 0x92, 0x00, 0};
 
     gdtr.limit = sizeof(gdt) - 1;

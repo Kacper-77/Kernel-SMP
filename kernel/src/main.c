@@ -10,6 +10,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Forward declaration of the high-half entry point
+void kernel_main_high(BootInfo *info);
+
 static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
                                 uint32_t rm, uint32_t gm, uint32_t bm) {
     if (rm == 0 && gm == 0 && bm == 0) return (r << 16) | (g << 8) | b;
@@ -17,59 +20,46 @@ static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
     return ((uint32_t)r << rs) | ((uint32_t)g << gs) | ((uint32_t)b << bs);
 }
 
-
+// Low-half entry point (Bootstrap)
 __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *info) {
-    init_serial();
-    kprint("--- Kernel Boot Sequence ---\n");
-
-    gdt_init();
-    kprint("GDT initialized.\n");
-
-    idt_init();
-    kprint("IDT initialized.\n");
-
     pmm_init(info);
-    kprint("PMM initialized.\n");
-
-    // TEST VMM
-    kprint("Initializing VMM (Identity Mapping)...\n");
     vmm_init(info); 
-    kprint("VMM Active. Paging is now enabled.\n");
 
-    // TEST PMM
-    kprint("Testing PMM under VMM...\n");
+    __asm__ __volatile__ (
+        "movabs $kernel_main_high, %%rax \n\t"
+        "jmp *%%rax"
+        : : "D"(info) : "rax"
+    );
+
+    while(1);
+}
+
+// High-half entry point
+void kernel_main_high(BootInfo *info) {
+    gdt_init();
+    idt_init();
+    init_serial();
+    kprint("### Greetings from Higher Half! ###\n");
+
+    // Re-verify PMM
     void* frame1 = pmm_alloc_frame();
-    void* frame2 = pmm_alloc_frame();
-    void* frame3 = pmm_alloc_frame();
-
-    kprint("Allocated frame 1: "); kprint_hex((uintptr_t)frame1); kprint("\n");
-    kprint("Allocated frame 2: "); kprint_hex((uintptr_t)frame2); kprint("\n");
-    kprint("Allocated frame 3: "); kprint_hex((uintptr_t)frame3); kprint("\n");
-
-    pmm_free_frame(frame2);
-    kprint("Freed frame 2.\n");
-
-    void* frame4 = pmm_alloc_frame();
-    kprint("Allocated frame 4 (should be same as 2): "); kprint_hex((uintptr_t)frame4); kprint("\n");
+    kprint("PMM Frame Test (High): "); kprint_hex((uintptr_t)frame1); kprint("\n");
 
     uint32_t rm = info->fb.red_mask;
     uint32_t gm = info->fb.green_mask;
     uint32_t bm = info->fb.blue_mask;
-    volatile uint32_t *fb = (volatile uint32_t*)(uintptr_t)info->fb.framebuffer_base;
+    
+    // Using the high virtual address for framebuffer
+    volatile uint32_t *fb = (volatile uint32_t*)0xFFFFFFFF40000000;
     uint32_t stride = info->fb.pixels_per_scanline;
 
     uint32_t cpu_count = 0;
 
     if (info->acpi.rsdp != 0) {
-        kprint("Found RSDP, opening RSDT...\n");
         acpi_rsdp_t *rsdp = (acpi_rsdp_t *)(uintptr_t)info->acpi.rsdp;
         acpi_rsdt_t *rsdt = (acpi_rsdt_t *)(uintptr_t)rsdp->rsdt_address;
         
-        // Purple square RSDT
-        uint32_t purple = pack_rgb(255, 0, 255, rm, gm, bm);
-        for(int y=0; y<40; y++) for(int x=0; x<40; x++) fb[y*stride + x + 200] = purple;
-
         uint32_t entries = (rsdt->header.length - sizeof(acpi_sdt_header_t)) / 4;
 
         for (uint32_t i = 0; i < entries; i++) {
@@ -78,28 +68,20 @@ void kernel_main(BootInfo *info) {
             if (table->signature[0] == 'A' && table->signature[1] == 'P' && 
                 table->signature[2] == 'I' && table->signature[3] == 'C') {
 
-                kprint("Found MADT! Parsing CPUs...\n");
-                
-                // Gold square for MADT
-                uint32_t gold = pack_rgb(255, 215, 0, rm, gm, bm);
-                for(int y=0; y<40; y++) for(int x=0; x<40; x++) fb[y*stride + x + 250] = gold;
-
+                kprint("Found MADT in Higher Half!\n");
                 acpi_madt_t *madt = (acpi_madt_t *)table;
 
-                // LAPIC TEST
                 lapic_init((uint64_t)madt->local_apic_address);
                 
                 uint32_t id = lapic_read(LAPIC_ID);
-                kprint("APIC ID of this CPU: ");
-                kprint_hex(id >> 24);
-                kprint("\n");
+                kprint("APIC ID: "); kprint_hex(id >> 24); kprint("\n");
 
                 uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
                 uint8_t *end = (uint8_t *)madt + madt->header.length;
 
                 while (ptr < end) {
                     acpi_madt_entry_t *entry = (acpi_madt_entry_t *)ptr;
-                    if (entry->type == 0) { // Local APIC
+                    if (entry->type == 0) {
                         madt_entry_lapic_t *lapic = (madt_entry_lapic_t *)ptr;
                         if (lapic->flags & 1) cpu_count++;
                     }
@@ -109,7 +91,7 @@ void kernel_main(BootInfo *info) {
         }
     }
 
-    // Blue squares for each CPU
+    // Visual feedback
     uint32_t blue = pack_rgb(0, 0, 255, rm, gm, bm);
     for (uint32_t i = 0; i < cpu_count; i++) {
         for (int y = 0; y < 20; y++) {
@@ -119,6 +101,6 @@ void kernel_main(BootInfo *info) {
         }
     }
 
-    kprint("Kernel is now idling.\n");
+    kprint("Higher Half kernel is now idling.\n");
     for (;;) { __asm__ __volatile__("hlt"); }
 }

@@ -16,7 +16,8 @@ int is_transmit_empty() {
 }
 
 void write_serial(char a) {
-    __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)a), "Nd"((uint16_t)0xE9));
+    while (is_transmit_empty() == 0);
+    outb(COM1, a);
 }
 
 void kprint(const char* s) {
@@ -27,7 +28,7 @@ void kprint(const char* s) {
 }
 
 void kprint_hex(uint64_t value) {
-    char hex_chars[] = "0123456789ABCDEF";
+    static const char* hex_chars = "0123456789ABCDEF";
     kprint("0x");
 
     for (int i = 15; i >= 0; i--) {

@@ -1,6 +1,5 @@
 #include <pmm.h>
 #include <vmm.h>
-#include <serial.h>
 
 uint8_t* bitmap = NULL;
 uint64_t bitmap_size = 0;
@@ -79,16 +78,16 @@ void pmm_init(BootInfo* boot_info) {
         pmm_set_frame(bitmap_addr + (i * PAGE_SIZE));
     }
     
-    // [memory] last_checked_index moved 
-    last_checked_index = (kernel_start + kernel_size) / PAGE_SIZE / 8;
-
-    kprint("PMM: Protected kernel at "); kprint_hex(kernel_start); kprint("\n");
+    // Safety check
+    last_checked_index = 0;
 }
 
 //
 // ALLOC and FREE
 //
 void* pmm_alloc_frame() {
+    if (bitmap == NULL) return NULL;
+
     for (uint64_t i = last_checked_index; i < bitmap_size; i++) {
         if (bitmap[i] == 0xFF) continue;
 
@@ -97,10 +96,11 @@ void* pmm_alloc_frame() {
                 uint64_t frame_index = i * 8 + b;
                 uint64_t frame_addr = frame_index * PAGE_SIZE;
 
-                // The address is 4KB aligned (it should be if PAGE_SIZE is 4096)
                 if (frame_addr == 0) continue; 
 
-                pmm_set_frame(frame_addr);
+                uint64_t idx = frame_index / 8;
+                bitmap[idx] |= (1 << (frame_index % 8));
+                
                 last_checked_index = i;
                 return (void*)frame_addr;
             }

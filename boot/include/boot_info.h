@@ -9,7 +9,7 @@
 // Used for early graphics, text output, and debugging.
 //
 typedef struct {
-    UINTN framebuffer_size;      // total size in bytes
+    UINTN   framebuffer_size;      // total size in bytes
     VOID   *framebuffer_base;    // Physical address of the framebuffer
     UINT32  width;               // Horizontal resolution in pixels
     UINT32  height;              // Vertical resolution in pixels

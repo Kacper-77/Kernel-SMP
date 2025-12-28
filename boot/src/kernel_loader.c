@@ -170,11 +170,11 @@ static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel
     UINT64 imageSize = hi - lo;
     UINTN pages = EFI_SIZE_TO_PAGES(imageSize);
 
-    // Allocate pages anywhere, then relocate relative to lo
-    EFI_PHYSICAL_ADDRESS kernel_addr = lo;
+    // Allocate pages
+    EFI_PHYSICAL_ADDRESS kernel_addr = 0x2000000;
     Status = gBS->AllocatePages(AllocateAddress, EfiLoaderCode, pages, &kernel_addr);
     if (EFI_ERROR(Status)) {
-        boot_panic(L"[KERNEL] AllocatePages (AnyPages) failed");
+        boot_panic(L"[KERNEL] AllocatePages failed");
         gBS->FreePool(Phdrs);
         return Status;
     }
@@ -210,12 +210,14 @@ static EFI_STATUS load_kernel_elf(EFI_FILE_PROTOCOL *File, BootKernel *outKernel
 
     gBS->FreePool(Phdrs);
 
-    // Fill BootKernel: entry relocated relative to lo
+    // Entry point
     outKernel->kernel_base  = (VOID*)(UINTN)kernel_addr;
     outKernel->kernel_size  = (UINTN)imageSize;
-    outKernel->kernel_entry = (VOID*)(UINTN)(dst_base + (Ehdr.e_entry - lo));
+    
+    UINT64 entry_offset = Ehdr.e_entry - lo;
+    outKernel->kernel_entry = (VOID*)(UINTN)(kernel_addr + entry_offset);
 
-    boot_log(L"[KERNEL] ELF kernel loaded (AnyPages + relocated)");
+    boot_log(L"[KERNEL] ELF kernel loaded (relocated)");
     return EFI_SUCCESS;
 }
 
