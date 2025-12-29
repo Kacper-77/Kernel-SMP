@@ -41,8 +41,4 @@ void lapic_init(uintptr_t virt_addr) {
 
     // 5. EOI (End of Interrupt)
     lapic_write(LAPIC_EOI, 0);
-
-    kprint("APIC: LAPIC initialized at virtual: ");
-    kprint_hex((uint64_t)lapic_base);
-    kprint("\n");
 }

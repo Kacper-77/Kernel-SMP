@@ -149,10 +149,8 @@ void vmm_init(BootInfo* bi) {
     }
 
     // 2. HIGHER HALF KERNEL MAPPING
-    uint64_t kernel_phys = KERNEL_PHYS_BASE;
-    size_t kernel_size = (uint64_t)(_kernel_end - _kernel_start);
-
-    vmm_map_range(local_pml4, KERNEL_VIRT_BASE, kernel_phys, kernel_size,
+    size_t kernel_size = (size_t)(_kernel_end - _kernel_start);
+    vmm_map_range(local_pml4, KERNEL_VIRT_BASE, KERNEL_PHYS_BASE, kernel_size,
                 PTE_PRESENT | PTE_WRITABLE);
 
 
@@ -164,15 +162,15 @@ void vmm_init(BootInfo* bi) {
     int stack_pages = 16;
 
     for (int i = 0; i < stack_pages; i++) {
-        uint64_t phys_addr = stack_page - (i * PAGE_SIZE);
-        uint64_t virt_addr = phys_to_virt(phys_addr);
+        uintptr_t phys_addr = stack_page - (i * PAGE_SIZE);
+        uintptr_t virt_addr = phys_to_virt(phys_addr);
         vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
     // 4. MAP THE FRAMEBUFFER
-    uint64_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
+    uintptr_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
+    uintptr_t fb_virt = phys_to_virt(fb_phys);
     uint64_t fb_size = bi->fb.framebuffer_size;
-    uint64_t fb_virt = phys_to_virt(fb_phys);
     vmm_map_range(local_pml4, fb_virt, fb_phys, fb_size, PTE_PRESENT | PTE_WRITABLE);
     
     if (bi->mmap.memory_map) {

@@ -7,6 +7,8 @@ set(CMAKE_ASM_COMPILER "clang")
 
 project(KernelSMP C ASM)
 
+include_directories(${CMAKE_SOURCE_DIR}/common)
+
 # Subdirectories
 add_subdirectory(boot)
 add_subdirectory(kernel)

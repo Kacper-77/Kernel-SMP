@@ -11,7 +11,7 @@
 #include <stddef.h>
 
 // Forward declaration of the high-half entry point
-void kernel_main_high(BootInfo *info);
+void kernel_main_high(BootInfo *bi);
 
 static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
                                 uint32_t rm, uint32_t gm, uint32_t bm) {
@@ -22,21 +22,21 @@ static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
 
 // Low-half entry point (Bootstrap)
 __attribute__((sysv_abi, section(".text.entry")))
-void kernel_main(BootInfo *info) {
-    pmm_init(info);
-    vmm_init(info); 
+void kernel_main(BootInfo *bi) {
+    pmm_init(bi);
+    vmm_init(bi); 
 
     __asm__ __volatile__ (
         "movabs $kernel_main_high, %%rax \n\t"
         "jmp *%%rax"
-        : : "D"(info) : "rax"
+        : : "D"(bi) : "rax"
     );
 
     while(1);
 }
 
 // High-half entry point
-void kernel_main_high(BootInfo *info) {
+void kernel_main_high(BootInfo *bi) {
     gdt_init();
     idt_init();
     init_serial();
@@ -46,30 +46,30 @@ void kernel_main_high(BootInfo *info) {
     void* frame1 = pmm_alloc_frame();
     kprint("PMM Frame Test: "); kprint_hex((uintptr_t)frame1); kprint("\n");
 
-    uint32_t rm = info->fb.red_mask;
-    uint32_t gm = info->fb.green_mask;
-    uint32_t bm = info->fb.blue_mask;
+    uint32_t rm = bi->fb.red_mask;
+    uint32_t gm = bi->fb.green_mask;
+    uint32_t bm = bi->fb.blue_mask;
     
     // Using the high virtual address for framebuffer
-    volatile uint32_t *fb = (volatile uint32_t*)phys_to_virt((uintptr_t)info->fb.framebuffer_base);
-    uint32_t stride = info->fb.pixels_per_scanline;
+    volatile uint32_t *fb = (volatile uint32_t*)phys_to_virt((uintptr_t)bi->fb.framebuffer_base);
+    uint32_t stride = bi->fb.pixels_per_scanline;
 
     uint32_t cpu_count = 0;
 
-    if (info->acpi.rsdp != 0) {
-        acpi_rsdp_t *rsdp = (acpi_rsdp_t *)(uintptr_t)info->acpi.rsdp;
-        acpi_rsdt_t *rsdt = (acpi_rsdt_t *)(uintptr_t)rsdp->rsdt_address;
+    if (bi->acpi.rsdp != 0) {
+        acpi_rsdp_t *rsdp = (acpi_rsdp_t*)(uintptr_t)bi->acpi.rsdp;
+        acpi_rsdt_t *rsdt = (acpi_rsdt_t*)(uintptr_t)rsdp->rsdt_address;
         
         uint32_t entries = (rsdt->header.length - sizeof(acpi_sdt_header_t)) / 4;
 
         for (uint32_t i = 0; i < entries; i++) {
-            acpi_sdt_header_t *table = (acpi_sdt_header_t *)(uintptr_t)rsdt->tables[i];
+            acpi_sdt_header_t *table = (acpi_sdt_header_t*)(uintptr_t)rsdt->tables[i];
 
             if (table->signature[0] == 'A' && table->signature[1] == 'P' && 
                 table->signature[2] == 'I' && table->signature[3] == 'C') {
 
                 kprint("Found MADT in Higher Half!\n");
-                acpi_madt_t *madt = (acpi_madt_t *)table;
+                acpi_madt_t *madt = (acpi_madt_t*)table;
 
                 uintptr_t v_lapic = (uintptr_t)vmm_map_device(vmm_get_pml4(), 
                                                  0xFFFFFFFF50000000,

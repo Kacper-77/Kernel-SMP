@@ -2,6 +2,7 @@
 #define PMM_H
 
 #include <boot_info.h>
+#include <efi_descriptor.h>
 #include <stdint.h>
 
 #define PAGE_SIZE 4096

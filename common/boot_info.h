@@ -4,10 +4,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-//
-// RAW Boot Info for Kernel
-//
-
 typedef struct {
     uint64_t framebuffer_size;
     void    *framebuffer_base;
@@ -44,16 +40,5 @@ typedef struct {
     BootAcpi        acpi;
     BootKernel      kernel;
 } BootInfo;
-
-//
-// PMM struct
-//
-typedef struct {
-    uint32_t type;
-    uint64_t physical_start;
-    uint64_t virtual_start;
-    uint64_t num_pages;
-    uint64_t attribute;
-} EFI_MEMORY_DESCRIPTOR;
 
 #endif
