@@ -11,6 +11,8 @@ extern uint8_t _kernel_end[];
 #define KERNEL_PHYS_BASE 0x2000000
 // Virtual address where the kernel starts
 #define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
+// Default addr mask
+#define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
 
 void* memset(void* dest, int ch, size_t count) {
     unsigned char* ptr = (unsigned char*)dest;
@@ -33,64 +35,75 @@ static inline void vmm_invlpg(void* addr) {
 // Maps a virtual page to a physical frame.
 // If intermediate tables don't exist, they are allocated using PMM.
 //
-void vmm_map(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t flags) {
+void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
     uint64_t pd_i   = PD_IDX(virt);
     uint64_t pt_i   = PT_IDX(virt);
 
-    // Physical address mask (bits 12-51) to avoid reserved bit violations
-    uint64_t addr_mask = 0x000FFFFFFFFFF000ULL;
-
     // Level 4 -> Level 3
     if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
         uint64_t new_table = (uint64_t)pmm_alloc_frame();
         memset((void*)new_table, 0, PAGE_SIZE);
-        pml4->entries[pml4_i] = (new_table & addr_mask) | PTE_PRESENT | PTE_WRITABLE;
+        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pdpt = (page_table_t*)(pml4->entries[pml4_i] & addr_mask);
+    page_table_t* pdpt = (page_table_t*)(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
     // Level 3 -> Level 2
     if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
         uint64_t new_table = (uint64_t)pmm_alloc_frame();
         memset((void*)new_table, 0, PAGE_SIZE);
-        pdpt->entries[pdpt_i] = (new_table & addr_mask) | PTE_PRESENT | PTE_WRITABLE;
+        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_i] & addr_mask);
+    page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
     // Level 2 -> Level 1
     if (!(pd->entries[pd_i] & PTE_PRESENT)) {
         uint64_t new_table = (uint64_t)pmm_alloc_frame();
         memset((void*)new_table, 0, PAGE_SIZE);
-        pd->entries[pd_i] = (new_table & addr_mask) | PTE_PRESENT | PTE_WRITABLE;
+        pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pt = (page_table_t*)(pd->entries[pd_i] & addr_mask);
+    page_table_t* pt = (page_table_t*)(pd->entries[pd_i] & VMM_ADDR_MASK);
 
     // Map final leaf entry
-    pt->entries[pt_i] = (phys & addr_mask) | flags | PTE_PRESENT;
+    pt->entries[pt_i] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
+}
+
+//
+// Mapping MMIO
+//
+void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size) {
+    uintptr_t phys_aligned = PAGE_ALIGN_DOWN(phys);
+    uintptr_t offset = phys - phys_aligned;
+    uint64_t full_size = PAGE_ALIGN_UP(size + offset);
+
+    // Default flags to avoid problems
+    uint64_t flags =  PTE_PRESENT | PTE_WRITABLE | PTE_PCD | PTE_PWT;
+
+    vmm_map_range(pml4, virt, phys_aligned, full_size, flags);
+
+    return (void*)(virt + offset);
 }
 
 //
 // Performs a "Page Walk" to translate a virtual address to its physical counterpart.
 // Returns the physical address or 0 if the page is not mapped.
 //
-uint64_t vmm_virtual_to_physical(page_table_t* pml4, uint64_t virt) {
-    uint64_t addr_mask = 0x000FFFFFFFFFF000ULL;
-
+uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt) {
     // Traverse the 4-level page table hierarchy
     if (!(pml4->entries[PML4_IDX(virt)] & PTE_PRESENT)) return 0;
-    page_table_t* pdpt = (page_table_t*)(pml4->entries[PML4_IDX(virt)] & addr_mask);
+    page_table_t* pdpt = (page_table_t*)(pml4->entries[PML4_IDX(virt)] & VMM_ADDR_MASK);
 
     if (!(pdpt->entries[PDPT_IDX(virt)] & PTE_PRESENT)) return 0;
-    page_table_t* pd = (page_table_t*)(pdpt->entries[PDPT_IDX(virt)] & addr_mask);
+    page_table_t* pd = (page_table_t*)(pdpt->entries[PDPT_IDX(virt)] & VMM_ADDR_MASK);
 
     if (!(pd->entries[PD_IDX(virt)] & PTE_PRESENT)) return 0;
-    page_table_t* pt = (page_table_t*)(pd->entries[PD_IDX(virt)] & addr_mask);
+    page_table_t* pt = (page_table_t*)(pd->entries[PD_IDX(virt)] & VMM_ADDR_MASK);
 
     if (!(pt->entries[PT_IDX(virt)] & PTE_PRESENT)) return 0;
 
     // Physical address = (address from PT entry) + (12-bit offset from virtual address)
-    return (pt->entries[PT_IDX(virt)] & addr_mask) + (virt & 0xFFF);
+    return (pt->entries[PT_IDX(virt)] & VMM_ADDR_MASK) + (virt & 0xFFF);
 }
 
 //
@@ -104,12 +117,12 @@ uintptr_t phys_to_virt(uintptr_t phys) {
 // Maps a contiguous range of virtual pages to a contiguous range of physical frames.
 // Automatically handles TLB invalidation for the entire range.
 //
-void vmm_map_range(page_table_t* pml4, uint64_t virt, uint64_t phys, uint64_t size, uint64_t flags) {
+void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
     uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
     
     for (uint64_t i = 0; i < num_pages; i++) {
-        uint64_t v_addr = virt + (i * PAGE_SIZE);
-        uint64_t p_addr = phys + (i * PAGE_SIZE);
+        uintptr_t v_addr = virt + (i * PAGE_SIZE);
+        uintptr_t p_addr = phys + (i * PAGE_SIZE);
         
         vmm_map(pml4, v_addr, p_addr, flags);
         vmm_invlpg((void*)v_addr);
@@ -135,12 +148,9 @@ void vmm_init(BootInfo* bi) {
         vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    // 1.5 MAPPING MMIO
-    vmm_map(local_pml4, 0xFEE00000, 0xFEE00000, PTE_PRESENT | PTE_WRITABLE);
-
     // 2. HIGHER HALF KERNEL MAPPING
     uint64_t kernel_phys = KERNEL_PHYS_BASE;
-    uint64_t kernel_size = (uint64_t)(_kernel_end - _kernel_start);
+    size_t kernel_size = (uint64_t)(_kernel_end - _kernel_start);
 
     vmm_map_range(local_pml4, KERNEL_VIRT_BASE, kernel_phys, kernel_size,
                 PTE_PRESENT | PTE_WRITABLE);
@@ -160,7 +170,6 @@ void vmm_init(BootInfo* bi) {
     }
 
     // 4. MAP THE FRAMEBUFFER
-    // Maps to a high virtual address (0xFFFFFFFF40000000) for the kernel to use.
     uint64_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
     uint64_t fb_size = bi->fb.framebuffer_size;
     uint64_t fb_virt = phys_to_virt(fb_phys);
@@ -175,8 +184,15 @@ void vmm_init(BootInfo* bi) {
 
     // 5. MAP THE BOOTINFO
     // Ensure the BootInfo structure is accessible after the address space switch.
-    uintptr_t bi_addr = (uintptr_t)bi;
-    vmm_map(local_pml4, PAGE_ALIGN_DOWN(bi_addr), PAGE_ALIGN_DOWN(bi_addr), PTE_PRESENT);
+    uintptr_t bi_phys = (uintptr_t)bi;
+    uintptr_t bi_virt = phys_to_virt((uintptr_t)bi);
+    vmm_map_range(
+        local_pml4, 
+        PAGE_ALIGN_DOWN(bi_virt), 
+        PAGE_ALIGN_DOWN(bi_phys), 
+        sizeof(BootInfo), 
+        PTE_PRESENT
+    );
 
     // 6. ENABLE NXE IN EFER MSR (No-Execute Enable)
     __asm__ volatile(

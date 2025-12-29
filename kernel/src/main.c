@@ -44,7 +44,7 @@ void kernel_main_high(BootInfo *info) {
 
     // Re-verify PMM
     void* frame1 = pmm_alloc_frame();
-    kprint("PMM Frame Test (High): "); kprint_hex((uintptr_t)frame1); kprint("\n");
+    kprint("PMM Frame Test: "); kprint_hex((uintptr_t)frame1); kprint("\n");
 
     uint32_t rm = info->fb.red_mask;
     uint32_t gm = info->fb.green_mask;
@@ -71,7 +71,11 @@ void kernel_main_high(BootInfo *info) {
                 kprint("Found MADT in Higher Half!\n");
                 acpi_madt_t *madt = (acpi_madt_t *)table;
 
-                lapic_init((uint64_t)madt->local_apic_address);
+                uintptr_t v_lapic = (uintptr_t)vmm_map_device(vmm_get_pml4(), 
+                                                 0xFFFFFFFF50000000,
+                                                 (uintptr_t)madt->local_apic_address, 
+                                                 4096);
+                lapic_init(v_lapic);
                 
                 uint32_t id = lapic_read(LAPIC_ID);
                 kprint("APIC ID: "); kprint_hex(id >> 24); kprint("\n");

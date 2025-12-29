@@ -26,25 +26,23 @@ void lapic_send_eoi() {
 //
 // Initialize the Local APIC for the current CPU
 //
-void lapic_init(uint64_t phys_addr) {
-    // 1. Map the LAPIC registers into virtual memory
-    // Even if using identity mapping, we ensure the page is present and writable
-    vmm_map_range(vmm_get_pml4(), phys_addr, phys_addr, 4096, PTE_PRESENT | PTE_WRITABLE);
-    
-    lapic_base = (uint32_t*)phys_addr;
+void lapic_init(uintptr_t virt_addr) {
+    lapic_base = (uint32_t*)virt_addr;
 
-    // 2. Clear Error Status Register (requires two writes on some CPUs)
+    // 2. Clear Error Status Register
     lapic_write(LAPIC_ESR, 0);
     lapic_write(LAPIC_ESR, 0);
 
-    // 3. Enable the Local APIC by setting the Spurious Interrupt Vector
-    // We map the spurious interrupt to vector 0xFF and set the enable bit
+    // 3. Enable the Local APIC
     lapic_write(LAPIC_SVR, lapic_read(LAPIC_SVR) | LAPIC_SVR_ENABLE | 0xFF);
 
-    // 4. Set Task Priority Register to 0 to allow all interrupts
+    // 4. Set Task Priority Register to 0
     lapic_write(LAPIC_TPR, 0);
 
-    kprint("APIC Local APIC initialized at physical: ");
-    kprint_hex(phys_addr);
+    // 5. EOI (End of Interrupt)
+    lapic_write(LAPIC_EOI, 0);
+
+    kprint("APIC: LAPIC initialized at virtual: ");
+    kprint_hex((uint64_t)lapic_base);
     kprint("\n");
 }
