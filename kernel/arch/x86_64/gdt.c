@@ -24,8 +24,8 @@ struct gdt_ptr {
     uint64_t base;
 } __attribute__((packed));
 
-// GDT layout: [0] Null, [1] Kernel Code, [2] Kernel Data
-static struct gdt_entry gdt[3];
+// GDT layout: [0] Null, [1] Kernel Code, [2] Kernel Data...
+static struct gdt_entry gdt[35];
 static struct gdt_ptr gdtr;
 
 //
@@ -35,19 +35,37 @@ static struct gdt_ptr gdtr;
 //
 extern void gdt_flush(uint64_t gdtr_ptr);
 
+//
+// Helper
+//
+void gdt_set_entry(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
+    gdt[num].base_low    = (base & 0xFFFF);
+    gdt[num].base_middle = (base >> 16) & 0xFF;
+    gdt[num].base_high   = (base >> 24) & 0xFF;
+
+    gdt[num].limit_low   = (limit & 0xFFFF);
+    gdt[num].granularity = (limit >> 16) & 0x0F;
+
+    gdt[num].granularity |= gran & 0xF0;
+    gdt[num].access      = access;
+}
+
+//
+// INIT, NOTE: will be changed.
+//
 void gdt_init() {
-    // 0x00: Null Descriptor - Always required
-    gdt[0] = (struct gdt_entry){0, 0, 0, 0, 0, 0};
+    for(int i = 0; i < 35; i++) {
+        gdt[i] = (struct gdt_entry){0, 0, 0, 0, 0, 0};
+    }
 
-    // 0x08: Kernel Code Segment
-    // Access 0x9A: 10011010b (Present, Ring 0, Code, Executable, Readable)
-    // Granularity 0x20: 00100000b (L-bit set for 64-bit Long Mode)
-    gdt[1] = (struct gdt_entry){0, 0, 0, 0x9A, 0x20, 0};
+    // 0x00: Null
+    gdt_set_entry(0, 0, 0, 0, 0);
 
-    // 0x10: Kernel Data Segment
-    // Access 0x92: 10010010b (Present, Ring 0, Data, Writable)
-    // Granularity 0x00: (L-bit not needed for data)
-    gdt[2] = (struct gdt_entry){0, 0, 0, 0x92, 0x00, 0};
+    // 0x08: Kernel Code (Long Mode: Access 0x9A, Granularity 0x20)
+    gdt_set_entry(1, 0, 0xFFFFFFFF, 0x9A, 0x20);
+
+    // 0x10: Kernel Data (Access 0x92, Granularity 0x00)
+    gdt_set_entry(2, 0, 0xFFFFFFFF, 0x92, 0x00);
 
     gdtr.limit = sizeof(gdt) - 1;
     gdtr.base = (uintptr_t)&gdt;
