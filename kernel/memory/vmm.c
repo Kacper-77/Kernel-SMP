@@ -23,6 +23,21 @@ void* memset(void* dest, int ch, size_t count) {
 }
 
 //
+// Atomic
+//
+static vmm_lock_t vmm_lock_ = {0};
+
+static void vmm_lock() {
+    while (__sync_lock_test_and_set(&vmm_lock_.lock, 1)) {
+        __asm__ volatile("pause");
+    }
+}
+
+static void vmm_unlock() {
+    __sync_lock_release(&vmm_lock_.lock);
+}
+
+//
 // Invalidates a single page in the TLB (Translation Lookaside Buffer).
 // Must be called after changing an existing mapping to ensure the CPU
 // doesn't use stale data from its internal cache.
@@ -36,6 +51,8 @@ static inline void vmm_invlpg(void* addr) {
 // If intermediate tables don't exist, they are allocated using PMM.
 //
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
+    vmm_lock();  // Lock
+
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
     uint64_t pd_i   = PD_IDX(virt);
@@ -67,6 +84,8 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
 
     // Map final leaf entry
     pt->entries[pt_i] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
+
+    vmm_unlock();  // Unlock
 }
 
 //
@@ -78,7 +97,7 @@ void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_
     uint64_t full_size = PAGE_ALIGN_UP(size + offset);
 
     // Default flags to avoid problems
-    uint64_t flags =  PTE_PRESENT | PTE_WRITABLE | PTE_PCD | PTE_PWT;
+    uint64_t flags =  PTE_PRESENT | PTE_WRITABLE | PTE_PCD | PTE_PWT | PTE_NX;
 
     vmm_map_range(pml4, virt, phys_aligned, full_size, flags);
 

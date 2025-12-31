@@ -47,4 +47,9 @@ void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t 
 
 page_table_t* vmm_get_pml4();
 
+// Atomic
+typedef struct {
+    volatile int lock;
+} vmm_lock_t;
+
 #endif

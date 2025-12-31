@@ -5,9 +5,29 @@ uint8_t* bitmap = NULL;
 uint64_t bitmap_size = 0;
 static uint64_t last_checked_index = 0; // Optimization for searching
 
+//
+// Atomic
+//
+static pmm_lock_t pmm_lock_ = {0};
+
+static void pmm_lock() {
+    while (__sync_lock_test_and_set(&pmm_lock_.lock, 1)) {
+        __asm__ volatile("pause");
+    }
+}
+
+static void pmm_unlock() {
+    __sync_lock_release(&pmm_lock_.lock);
+}
+
+//
 // Standard UEFI Memory Types
+//
 #define EFI_CONVENTIONAL_MEMORY 7
 
+//
+// Helpers
+//
 void pmm_set_frame(uint64_t frame_addr) {
     uint64_t frame_index = frame_addr / PAGE_SIZE;
     bitmap[frame_index / 8] |= (1 << (frame_index % 8));
@@ -55,9 +75,10 @@ void pmm_init(BootInfo* boot_info) {
     // Third pass: Unlock only Conventional Memory frames in the bitmap
     for (uint64_t i = 0; i < entries; i++) {
         EFI_MEMORY_DESCRIPTOR* desc = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)mmap->memory_map + (i * mmap->descriptor_size));
-        if (desc->type == EFI_CONVENTIONAL_MEMORY) {
+        if (desc->type == EFI_CONVENTIONAL_MEMORY || desc->type == 4) {
             for (uint64_t j = 0; j < desc->num_pages; j++) {
-                pmm_unset_frame(desc->physical_start + (j * PAGE_SIZE));
+                uint64_t addr = desc->physical_start + (j * PAGE_SIZE);
+                if (addr >= 0x100000) pmm_unset_frame(desc->physical_start + (j * PAGE_SIZE));
             }
         }
     }
@@ -87,6 +108,9 @@ void pmm_init(BootInfo* boot_info) {
 //
 void* pmm_alloc_frame() {
     if (bitmap == NULL) return NULL;
+    
+    // Lock before start
+    pmm_lock();
 
     for (uint64_t i = last_checked_index; i < bitmap_size; i++) {
         if (bitmap[i] == 0xFF) continue;
@@ -102,14 +126,20 @@ void* pmm_alloc_frame() {
                 bitmap[idx] |= (1 << (frame_index % 8));
                 
                 last_checked_index = i;
+                pmm_unlock();  // Unlock
                 return (void*)frame_addr;
             }
         }
     }
+    pmm_unlock(); // Unlock even frame haven't found
     return NULL; 
 }
 
 void pmm_free_frame(void* frame) {
+    if (!frame) return;
+
+    pmm_lock();
+
     uint64_t addr = (uint64_t)frame;
     pmm_unset_frame(addr);
 
@@ -118,4 +148,6 @@ void pmm_free_frame(void* frame) {
     if (frame_index < last_checked_index) {
         last_checked_index = frame_index;
     }
+    
+    pmm_unlock();
 }

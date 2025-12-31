@@ -47,11 +47,13 @@ common_stub:
     push r14
     push r15
 
-    ; Pass pointer to the stack (the registers structure) to C
-    mov rdi, rsp
+    sub rsp, 8 
+    mov rdi, rsp            
+    add rdi, 8
     
-    ; Calling C handler
-    call exception_handler
+    call exception_handler  ; Calling C handler
+
+    add rsp, 8
 
     ; RESTORE STATE
     pop r15

@@ -10,8 +10,8 @@
 // System V ABI - entry for Kernel
 typedef void (__attribute__((sysv_abi)) *KERNEL_ENTRY)(BootInfo *);
 
-EFI_SYSTEM_TABLE  *gST = NULL;
-EFI_BOOT_SERVICES *gBS = NULL;
+EFI_SYSTEM_TABLE     *gST = NULL;
+EFI_BOOT_SERVICES    *gBS = NULL;
 EFI_RUNTIME_SERVICES *gRT = NULL;
 
 //
@@ -69,7 +69,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     // 6. Get final memory map and exit UEFI
     // After this point, UEFI Boot Services are terminated. No more boot_log or gBS calls
     if (EFI_ERROR(final_memory_map_and_exit(&bi.mmap, ImageHandle))) {
-        // Only HLT
         for(;;) { __asm__("hlt"); }
     }
 
