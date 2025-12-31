@@ -29,19 +29,25 @@ typedef struct {
     uint8_t reserved[3];
 } __attribute__((packed)) acpi_rsdp_t;
 
-// Root System Description Table (RSDT)
+// RSDT
 typedef struct {
     acpi_sdt_header_t header;
     uint32_t tables[];
 } __attribute__((packed)) acpi_rsdt_t;
 
+// XSDT
+typedef struct {
+    acpi_sdt_header_t header;
+    uint64_t tables[];
+} __attribute__((packed)) acpi_xsdt_t;
+
+// MADT
 typedef struct {
     acpi_sdt_header_t header;
     uint32_t local_apic_address;
     uint32_t flags;
 } __attribute__((packed)) acpi_madt_t;
 
-// MADT
 typedef struct {
     uint8_t type;
     uint8_t length;
