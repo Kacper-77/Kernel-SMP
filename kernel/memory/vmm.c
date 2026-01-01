@@ -244,7 +244,7 @@ void vmm_init(BootInfo* bi) {
 
 
     // 4. MAP THE STACK
-    // Ensures the current stack remains valid after the switch.
+    // Ensures the current stack remains valid after the switch
     uint64_t current_rsp;
     __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
     uint64_t stack_page = PAGE_ALIGN_DOWN(current_rsp);
@@ -264,7 +264,7 @@ void vmm_init(BootInfo* bi) {
     bi->fb.framebuffer_base = (void*)fb_virt;
 
     // 6. MAP THE BOOTINFO
-    // Ensure the BootInfo structure is accessible after the address space switch.
+    // Ensure the BootInfo structure is accessible after the address space switch
     uintptr_t bi_phys = (uintptr_t)bi;
     uintptr_t bi_virt = phys_to_virt((uintptr_t)bi);
     vmm_map_range(
@@ -291,7 +291,7 @@ void vmm_init(BootInfo* bi) {
     __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
 
     // 9. TEMPORARILY DISABLE WP IN CR0
-    // This allows the kernel to initialize tables without immediate protection faults.
+    // This allows the kernel to initialize tables without immediate protection faults
     uint64_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 &= ~(1 << 16);
