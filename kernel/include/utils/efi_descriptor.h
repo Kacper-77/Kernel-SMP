@@ -13,4 +13,10 @@ typedef struct {
     uint64_t attribute;
 } EFI_MEMORY_DESCRIPTOR;
 
+#define EFI_CONVENTIONAL_MEMORY     7
+#define EFI_LOADER_CODE             1
+#define EFI_LOADER_DATA             2
+#define EFI_BOOT_SERVICES_CODE      3
+#define EFI_BOOT_SERVICES_DATA      4
+
 #endif

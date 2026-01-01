@@ -1,5 +1,6 @@
 #include <pmm.h>
 #include <vmm.h>
+#include <efi_descriptor.h>
 
 uint8_t* bitmap = NULL;
 uint64_t bitmap_size = 0;
@@ -19,11 +20,6 @@ static void pmm_lock() {
 static void pmm_unlock() {
     __sync_lock_release(&pmm_lock_.lock);
 }
-
-//
-// Standard UEFI Memory Types
-//
-#define EFI_CONVENTIONAL_MEMORY 7
 
 //
 // Helpers

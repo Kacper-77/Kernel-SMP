@@ -40,7 +40,7 @@ void kernel_main_high(BootInfo *bi) {
     gdt_init();
     idt_init();
     init_serial();
-    kprint("### Greetings from Higher Half! ###\n");
+    kprint("###   Greetings from Higher Half!   ###\n");
 
     // Re-verify PMM
     void* frame1 = pmm_alloc_frame();
@@ -51,46 +51,41 @@ void kernel_main_high(BootInfo *bi) {
     uint32_t bm = bi->fb.blue_mask;
     
     // Using the high virtual address for framebuffer
-    volatile uint32_t *fb = (volatile uint32_t*)phys_to_virt((uintptr_t)bi->fb.framebuffer_base);
+    volatile uint32_t *fb = (volatile uint32_t*)bi->fb.framebuffer_base;
+    kprint("FB Virt: "); kprint_hex((uintptr_t)fb); kprint("\n");
+    kprint("FB Size: "); kprint_hex((uintptr_t)bi->fb.framebuffer_size); kprint("\n");
+
     uint32_t stride = bi->fb.pixels_per_scanline;
 
     uint32_t cpu_count = 0;
 
     if (bi->acpi.rsdp != 0) {
-        acpi_rsdp_t *rsdp = (acpi_rsdp_t*)(uintptr_t)bi->acpi.rsdp;
-        acpi_rsdt_t *rsdt = (acpi_rsdt_t*)(uintptr_t)rsdp->rsdt_address;
-        
-        uint32_t entries = (rsdt->header.length - sizeof(acpi_sdt_header_t)) / 4;
+        // kprint("RSDP Phys: "); kprint_hex((uintptr_t)bi->acpi.rsdp); kprint("\n");
+        acpi_rsdp_t *rsdp = (acpi_rsdp_t*)phys_to_virt((uintptr_t)bi->acpi.rsdp);
+        kprint("RSDP Virt: "); kprint_hex((uintptr_t)rsdp); kprint("\n");
 
-        for (uint32_t i = 0; i < entries; i++) {
-            acpi_sdt_header_t *table = (acpi_sdt_header_t*)(uintptr_t)rsdt->tables[i];
+        acpi_madt_t *madt = (acpi_madt_t*)acpi_find_table(rsdp, "APIC");
 
-            if (table->signature[0] == 'A' && table->signature[1] == 'P' && 
-                table->signature[2] == 'I' && table->signature[3] == 'C') {
+        if (madt) {
+            uintptr_t v_lapic = (uintptr_t)vmm_map_device(vmm_get_pml4(), 
+                                                0xFFFFFFFF50000000,
+                                                (uintptr_t)madt->local_apic_address, 
+                                                4096);
+            lapic_init(v_lapic);
+            
+            uint32_t id = lapic_read(LAPIC_ID);
+            kprint("APIC ID: "); kprint_hex(id >> 24); kprint("\n");
 
-                kprint("Found MADT in Higher Half!\n");
-                acpi_madt_t *madt = (acpi_madt_t*)table;
+            uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
+            uint8_t *end = (uint8_t *)madt + madt->header.length;
 
-                uintptr_t v_lapic = (uintptr_t)vmm_map_device(vmm_get_pml4(), 
-                                                 0xFFFFFFFF50000000,
-                                                 (uintptr_t)madt->local_apic_address, 
-                                                 4096);
-                lapic_init(v_lapic);
-                
-                uint32_t id = lapic_read(LAPIC_ID);
-                kprint("APIC ID: "); kprint_hex(id >> 24); kprint("\n");
-
-                uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
-                uint8_t *end = (uint8_t *)madt + madt->header.length;
-
-                while (ptr < end) {
-                    acpi_madt_entry_t *entry = (acpi_madt_entry_t *)ptr;
-                    if (entry->type == 0) {
-                        madt_entry_lapic_t *lapic = (madt_entry_lapic_t *)ptr;
-                        if (lapic->flags & 1) cpu_count++;
-                    }
-                    ptr += entry->length;
+            while (ptr < end) {
+                acpi_madt_entry_t *entry = (acpi_madt_entry_t *)ptr;
+                if (entry->type == 0) {
+                    madt_entry_lapic_t *lapic = (madt_entry_lapic_t *)ptr;
+                    if (lapic->flags & 1) cpu_count++;
                 }
+                ptr += entry->length;
             }
         }
     }
@@ -105,6 +100,6 @@ void kernel_main_high(BootInfo *bi) {
         }
     }
 
-    kprint("Higher Half kernel is now idling.\n");
+    kprint("###   Higher Half kernel is now idling.   ###\n");
     for (;;) { __asm__ __volatile__("hlt"); }
 }

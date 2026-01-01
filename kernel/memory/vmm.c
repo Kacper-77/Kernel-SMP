@@ -1,5 +1,6 @@
-#include "vmm.h"
-#include "pmm.h"
+#include <vmm.h>
+#include <pmm.h>
+#include <efi_descriptor.h>
 
 static page_table_t* kernel_pml4 = NULL;
 
@@ -13,6 +14,8 @@ extern uint8_t _kernel_end[];
 #define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
 // Default addr mask
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
+
+#define HHDM_OFFSET 0xFFFF800000000000
 
 void* memset(void* dest, int ch, size_t count) {
     unsigned char* ptr = (unsigned char*)dest;
@@ -44,6 +47,27 @@ static void vmm_unlock() {
 //
 static inline void vmm_invlpg(void* addr) {
     __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
+//
+// Configures the Page Attribute Table (PAT) MSR to define 
+// memory caching types. We set PAT4 to Write-Combining (WC) 
+// for high-performance framebuffer access.
+//
+static void vmm_enable_pat() {
+    uint32_t low, high;
+    __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(0x277));
+
+    uint64_t pat = ((uint64_t)high << 32) | low;
+
+    // Set PAT4 (Write-Combining)
+    pat &= ~(0xFFULL << 32);      
+    pat |= (0x01ULL << 32);       
+
+    low = (uint32_t)pat;
+    high = (uint32_t)(pat >> 32);
+
+    __asm__ volatile("wrmsr" : : "a"(low), "d"(high), "c"(0x277));
 }
 
 //
@@ -88,16 +112,45 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     vmm_unlock();  // Unlock
 }
 
+// 2MB
+void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
+    vmm_lock();
+
+    uint64_t pml4_i = PML4_IDX(virt);
+    uint64_t pdpt_i = PDPT_IDX(virt);
+    uint64_t pd_i   = PD_IDX(virt);
+
+    if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
+        uint64_t new_table = (uint64_t)pmm_alloc_frame();
+        memset((void*)new_table, 0, PAGE_SIZE);
+        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+    }
+    page_table_t* pdpt = (page_table_t*)(pml4->entries[pml4_i] & VMM_ADDR_MASK);
+
+    if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
+        uint64_t new_table = (uint64_t)pmm_alloc_frame();
+        memset((void*)new_table, 0, PAGE_SIZE);
+        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+    }
+    page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
+
+    pd->entries[pd_i] = (phys & VMM_ADDR_MASK) | flags | 0x81; 
+
+    vmm_unlock();
+}
+
 //
-// Mapping MMIO
+// Maps Memory Mapped I/O (MMIO) devices.
+// Uses Write-Combining (via PAT4) for performance, while 
+// ensuring No-Execute (NX) and Writable permissions.
 //
 void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size) {
     uintptr_t phys_aligned = PAGE_ALIGN_DOWN(phys);
     uintptr_t offset = phys - phys_aligned;
     uint64_t full_size = PAGE_ALIGN_UP(size + offset);
 
-    // Default flags to avoid problems
-    uint64_t flags =  PTE_PRESENT | PTE_WRITABLE | PTE_PCD | PTE_PWT | PTE_NX;
+    // Use PAT bit (bit 7) to trigger Write-Combining (WC) via PAT4 entry
+    uint64_t flags = PTE_PRESENT | PTE_WRITABLE | PTE_NX | (1ULL << 7);
 
     vmm_map_range(pml4, virt, phys_aligned, full_size, flags);
 
@@ -129,7 +182,7 @@ uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt) {
 // Transform PA -> VA
 //
 uintptr_t phys_to_virt(uintptr_t phys) {
-    return phys - KERNEL_PHYS_BASE + KERNEL_VIRT_BASE;
+    return phys + HHDM_OFFSET;
 }
 
 //
@@ -153,6 +206,7 @@ void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t 
 // and performing the switch via CR3 and segment reloading.
 //
 void vmm_init(BootInfo* bi) {
+    vmm_enable_pat();
     // CRITICAL: Use a local pointer (stored on the stack) instead of the global 'kernel_pml4'.
     // The global variable is located in the .bss section at a high virtual address (0xFFFFFFFF...),
     // which will cause a Page Fault if accessed before paging is enabled.
@@ -167,13 +221,29 @@ void vmm_init(BootInfo* bi) {
         vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    // 2. HIGHER HALF KERNEL MAPPING
+    // 2.  DIRECT PHYSICAL MAPPING (HHDM)
+    uint64_t desc_size = bi->mmap.descriptor_size;
+    uint64_t total_map_size = bi->mmap.memory_map_size;
+    uint8_t* map_ptr = (uint8_t*)bi->mmap.memory_map;
+
+    for (uint64_t offset = 0; offset < total_map_size; offset += desc_size) {
+        EFI_MEMORY_DESCRIPTOR* desc = (EFI_MEMORY_DESCRIPTOR*)(map_ptr + offset);
+
+        if (desc->type != 5 && desc->num_pages > 0) {
+            uint64_t phys_start = desc->physical_start;
+            uint64_t size = desc->num_pages * 4096;
+
+            vmm_map_range(local_pml4, phys_start + HHDM_OFFSET, phys_start, size, PTE_PRESENT | PTE_WRITABLE);
+        }
+    }
+
+    // 3. HIGHER HALF KERNEL MAPPING
     size_t kernel_size = (size_t)(_kernel_end - _kernel_start);
     vmm_map_range(local_pml4, KERNEL_VIRT_BASE, KERNEL_PHYS_BASE, kernel_size,
                 PTE_PRESENT | PTE_WRITABLE);
 
 
-    // 3. MAP THE STACK
+    // 4. MAP THE STACK
     // Ensures the current stack remains valid after the switch.
     uint64_t current_rsp;
     __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
@@ -186,20 +256,14 @@ void vmm_init(BootInfo* bi) {
         vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
-    // 4. MAP THE FRAMEBUFFER
-    uintptr_t fb_phys = (uint64_t)bi->fb.framebuffer_base;
-    uintptr_t fb_virt = phys_to_virt(fb_phys);
-    uint64_t fb_size = bi->fb.framebuffer_size;
-    vmm_map_range(local_pml4, fb_virt, fb_phys, fb_size, PTE_PRESENT | PTE_WRITABLE);
+    // 5. MAP THE FRAMEBUFFER
+    uintptr_t fb_phys = (uintptr_t)bi->fb.framebuffer_base;
+    uintptr_t fb_virt = phys_to_virt(fb_phys); 
+    vmm_map_device(local_pml4, fb_virt, fb_phys, bi->fb.framebuffer_size);
     
-    if (bi->mmap.memory_map) {
-        uintptr_t mmap_phys = (uintptr_t)bi->mmap.memory_map;
-        uintptr_t mmap_size = bi->mmap.memory_map_size;
-        uint64_t mmap_virt = phys_to_virt(mmap_phys);
-        vmm_map_range(local_pml4, mmap_virt, mmap_phys, mmap_size, PTE_PRESENT);
-    }
+    bi->fb.framebuffer_base = (void*)fb_virt;
 
-    // 5. MAP THE BOOTINFO
+    // 6. MAP THE BOOTINFO
     // Ensure the BootInfo structure is accessible after the address space switch.
     uintptr_t bi_phys = (uintptr_t)bi;
     uintptr_t bi_virt = phys_to_virt((uintptr_t)bi);
@@ -211,7 +275,7 @@ void vmm_init(BootInfo* bi) {
         PTE_PRESENT
     );
 
-    // 6. ENABLE NXE IN EFER MSR (No-Execute Enable)
+    // 7. ENABLE NXE IN EFER MSR (No-Execute Enable)
     __asm__ volatile(
         "mov $0xC0000080, %%ecx\n"
         "rdmsr\n"
@@ -220,24 +284,31 @@ void vmm_init(BootInfo* bi) {
         ::: "ecx", "eax", "edx"
     );
 
-    // 7. ENABLE PAE IN CR4
+    // 8. ENABLE PAE IN CR4
     uint64_t cr4;
     __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
     cr4 |= (1 << 5);
     __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
 
-    // 8. TEMPORARILY DISABLE WP IN CR0
+    // 9. TEMPORARILY DISABLE WP IN CR0
     // This allows the kernel to initialize tables without immediate protection faults.
     uint64_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 &= ~(1 << 16);
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 
-    // 9. LOAD CR3 AND REFRESH TLB
-    // After this instruction, the new memory map is active.
-    __asm__ volatile("mov %0, %%cr3" : : "r"(local_pml4) : "memory");
+    // 10. LOAD CR3 AND SWITCH STACK TO HIGHER HALF
+    __asm__ volatile(
+        "mov %0, %%cr3\n\t"                  
+        "movabs $0xFFFF800000000000, %%rax\n\t"
+        "add %%rax, %%rsp\n\t"               
+        "add %%rax, %%rbp"                   
+        : 
+        : "r"(local_pml4) 
+        : "rax", "memory"
+    );
 
-    // 10. SAFE TO ACCESS GLOBAL VARIABLES NOW
+    // 11. SAFE TO ACCESS GLOBAL VARIABLES NOW
     kernel_pml4 = local_pml4;
 }
 
