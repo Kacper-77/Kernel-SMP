@@ -29,16 +29,25 @@ void lapic_send_eoi() {
 void lapic_init(uintptr_t virt_addr) {
     lapic_base = (uint32_t*)virt_addr;
 
-    // 2. Clear Error Status Register
+    // 1. Clear Error Status Register
     lapic_write(LAPIC_ESR, 0);
     lapic_write(LAPIC_ESR, 0);
 
-    // 3. Enable the Local APIC
+    // 2. Enable the Local APIC
     lapic_write(LAPIC_SVR, lapic_read(LAPIC_SVR) | LAPIC_SVR_ENABLE | 0xFF);
 
-    // 4. Set Task Priority Register to 0
+    // 3. Set Task Priority Register to 0
     lapic_write(LAPIC_TPR, 0);
 
-    // 5. EOI (End of Interrupt)
+    // 4. EOI (End of Interrupt)
     lapic_write(LAPIC_EOI, 0);
+}
+
+void lapic_init_ap() {
+    lapic_write(LAPIC_SVR, lapic_read(LAPIC_SVR) | 0x1FF);
+
+    lapic_write(LAPIC_TPR, 0);
+
+    lapic_write(LAPIC_ESR, 0);
+    lapic_write(LAPIC_ESR, 0);
 }

@@ -39,6 +39,7 @@ typedef struct {
 #define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFFULL)
 
 void vmm_init(BootInfo* bi);
+void vmm_enable_pat();
 uintptr_t phys_to_virt(uintptr_t phys);
 uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt);
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
@@ -46,6 +47,7 @@ void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_
 void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags);
 
 page_table_t* vmm_get_pml4();
+uintptr_t vmm_get_pml4_phys();
 
 // Atomic
 typedef struct {

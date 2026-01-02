@@ -131,6 +131,41 @@ void* pmm_alloc_frame() {
     return NULL; 
 }
 
+void* pmm_alloc_frames(size_t count) {
+    if (bitmap == NULL || count == 0) return NULL;
+
+    pmm_lock();
+
+    uint64_t total_bits = bitmap_size * 8;
+
+    for (uint64_t i = 0; i < total_bits - count; i++) {
+        uint64_t free_found = 0;
+
+        for (uint64_t j = 0; j < count; j++) {
+            uint64_t bit_idx = i + j;
+            if (!(bitmap[bit_idx / 8] & (1 << (bit_idx % 8)))) {
+                free_found++;
+            } else {
+                break;
+            }
+        }
+
+        if (free_found == count) {
+            for (uint64_t j = 0; j < count; j++) {
+                uint64_t bit_idx = i + j;
+                bitmap[bit_idx / 8] |= (1 << (bit_idx % 8));
+            }
+
+            uint64_t phys_addr = i * PAGE_SIZE;
+            pmm_unlock();
+            return (void*)phys_addr;
+        }
+    }
+
+    pmm_unlock();
+    return NULL;
+}
+
 void pmm_free_frame(void* frame) {
     if (!frame) return;
 

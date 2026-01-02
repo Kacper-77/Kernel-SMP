@@ -1,8 +1,10 @@
 #include <vmm.h>
 #include <pmm.h>
 #include <efi_descriptor.h>
+#include <std_funcs.h>
 
 static page_table_t* kernel_pml4 = NULL;
+static uintptr_t kernel_pml4_phys = 0;
 
 // Symbols from the new linker script
 extern uint8_t _kernel_start[];
@@ -16,14 +18,6 @@ extern uint8_t _kernel_end[];
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
 
 #define HHDM_OFFSET 0xFFFF800000000000
-
-void* memset(void* dest, int ch, size_t count) {
-    unsigned char* ptr = (unsigned char*)dest;
-    while (count--) {
-        *ptr++ = (unsigned char)ch;
-    }
-    return dest;
-}
 
 //
 // Atomic
@@ -54,7 +48,7 @@ static inline void vmm_invlpg(void* addr) {
 // memory caching types. We set PAT4 to Write-Combining (WC) 
 // for high-performance framebuffer access.
 //
-static void vmm_enable_pat() {
+void vmm_enable_pat() {
     uint32_t low, high;
     __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(0x277));
 
@@ -221,6 +215,8 @@ void vmm_init(BootInfo* bi) {
         vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
+    kernel_pml4_phys = (uintptr_t)local_pml4;
+
     // 2.  DIRECT PHYSICAL MAPPING (HHDM)
     uint64_t desc_size = bi->mmap.descriptor_size;
     uint64_t total_map_size = bi->mmap.memory_map_size;
@@ -315,4 +311,8 @@ void vmm_init(BootInfo* bi) {
 // Getter
 page_table_t* vmm_get_pml4() {
     return kernel_pml4;
+}
+
+uintptr_t vmm_get_pml4_phys() {
+    return kernel_pml4_phys;
 }

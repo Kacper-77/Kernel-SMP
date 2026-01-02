@@ -50,8 +50,14 @@ void gdt_set_entry(int num, uint32_t base, uint32_t limit, uint8_t access, uint8
     gdt[num].access      = access;
 }
 
+void gdt_reload_local() {
+    gdtr.limit = sizeof(gdt) - 1;
+    gdtr.base = (uintptr_t)&gdt;
+    gdt_flush((uintptr_t)&gdtr);
+}
+
 //
-// INIT, NOTE: will be changed.
+// INIT
 //
 void gdt_init() {
     for(int i = 0; i < 35; i++) {
@@ -67,10 +73,5 @@ void gdt_init() {
     // 0x10: Kernel Data (Access 0x92, Granularity 0x00)
     gdt_set_entry(2, 0, 0xFFFFFFFF, 0x92, 0x00);
 
-    gdtr.limit = sizeof(gdt) - 1;
-    gdtr.base = (uintptr_t)&gdt;
-
-    // Load the GDT and refresh segments
-    // We use an assembly helper for a clean CS reload
-    gdt_flush((uintptr_t)&gdtr);
+    gdt_reload_local();
 }

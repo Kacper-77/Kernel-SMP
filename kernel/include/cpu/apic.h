@@ -32,12 +32,11 @@
 #define LAPIC_TICR          0x0380   // Timer Initial Count Register 
 #define LAPIC_TCCR          0x0390   // Timer Current Count Register 
 #define LAPIC_TDCR          0x03E0   // Timer Divide Configuration Register 
-
-
-#define LAPIC_SVR_ENABLE    0x100  // Unit Enable Bit
+#define LAPIC_SVR_ENABLE    0x100    // Unit Enable Bit
 
 // Driver Functions
-void lapic_init(uint64_t phys_addr);
+void lapic_init(uintptr_t virt_addr);
+void lapic_init_ap();
 void lapic_write(uint32_t reg, uint32_t data);
 uint32_t lapic_read(uint32_t reg);
 void lapic_send_eoi();

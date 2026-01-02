@@ -12,6 +12,7 @@ extern uint64_t bitmap_size;
 
 void pmm_init(BootInfo* boot_info);
 void* pmm_alloc_frame();
+void* pmm_alloc_frames(size_t count);
 void pmm_free_frame(void* frame);
 
 // Internal helper functions

@@ -6,6 +6,7 @@
 #include <pmm.h>
 #include <vmm.h>
 #include <apic.h>
+#include <smp.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -23,6 +24,7 @@ static inline uint32_t pack_rgb(uint8_t r, uint8_t g, uint8_t b,
 // Low-half entry point (Bootstrap)
 __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *bi) {
+    __asm__ volatile("cli");
     pmm_init(bi);
     vmm_init(bi); 
 
@@ -68,25 +70,32 @@ void kernel_main_high(BootInfo *bi) {
 
         if (madt) {
             uintptr_t v_lapic = (uintptr_t)vmm_map_device(vmm_get_pml4(), 
-                                                0xFFFFFFFF50000000,
+                                                (uintptr_t)phys_to_virt(madt->local_apic_address),
                                                 (uintptr_t)madt->local_apic_address, 
                                                 4096);
             lapic_init(v_lapic);
+
+            // SMP first test - not passed in 100% (more like 60%)
+            kprint("Starting SMP initialization...\n");
+            smp_init(bi);
+
+            cpu_count = get_cpu_count_test();
+            // cpu_count++;
             
             uint32_t id = lapic_read(LAPIC_ID);
             kprint("APIC ID: "); kprint_hex(id >> 24); kprint("\n");
 
-            uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
-            uint8_t *end = (uint8_t *)madt + madt->header.length;
+            // uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
+            // uint8_t *end = (uint8_t *)madt + madt->header.length;
 
-            while (ptr < end) {
-                acpi_madt_entry_t *entry = (acpi_madt_entry_t *)ptr;
-                if (entry->type == 0) {
-                    madt_entry_lapic_t *lapic = (madt_entry_lapic_t *)ptr;
-                    if (lapic->flags & 1) cpu_count++;
-                }
-                ptr += entry->length;
-            }
+            // while (ptr < end) {
+            //     acpi_madt_entry_t *entry = (acpi_madt_entry_t *)ptr;
+            //     if (entry->type == 0) {
+            //         madt_entry_lapic_t *lapic = (madt_entry_lapic_t *)ptr;
+            //         if (lapic->flags & 1) cpu_count++;
+            //     }
+            //     ptr += entry->length;
+            // }
         }
     }
 

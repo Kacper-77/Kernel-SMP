@@ -1,6 +1,8 @@
 #ifndef CPU_H
 #define CPU_H
 
+#include <stdint.h>
+
 typedef struct cpu_context {
     uint64_t cpu_id;             // Local ID
     uint64_t lapic_id;           // Physical APIC ID
