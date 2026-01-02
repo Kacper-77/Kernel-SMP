@@ -74,7 +74,7 @@ void pmm_init(BootInfo* boot_info) {
         if (desc->type == EFI_CONVENTIONAL_MEMORY || desc->type == 4) {
             for (uint64_t j = 0; j < desc->num_pages; j++) {
                 uint64_t addr = desc->physical_start + (j * PAGE_SIZE);
-                if (addr >= 0x100000) pmm_unset_frame(desc->physical_start + (j * PAGE_SIZE));
+                if (addr >= 0x100000) pmm_unset_frame(addr);
             }
         }
     }
@@ -127,7 +127,7 @@ void* pmm_alloc_frame() {
             }
         }
     }
-    pmm_unlock(); // Unlock even frame haven't found
+    pmm_unlock(); // Unlock even if frame haven't found
     return NULL; 
 }
 
