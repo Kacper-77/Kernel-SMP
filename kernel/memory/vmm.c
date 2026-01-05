@@ -35,6 +35,16 @@ static void vmm_unlock() {
 }
 
 //
+// Helper
+//
+static inline page_table_t* vmm_get_table(uintptr_t phys) {
+    if (kernel_pml4 == NULL) {
+        return (page_table_t*)phys;
+    }
+    return (page_table_t*)phys_to_virt(phys);
+}
+
+//
 // Invalidates a single page in the TLB (Translation Lookaside Buffer).
 // Must be called after changing an existing mapping to ensure the CPU
 // doesn't use stale data from its internal cache.
@@ -69,7 +79,7 @@ void vmm_enable_pat() {
 // If intermediate tables don't exist, they are allocated using PMM.
 //
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
-    vmm_lock();  // Lock
+    vmm_lock();
 
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -78,32 +88,31 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
 
     // Level 4 -> Level 3
     if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
-        uint64_t new_table = (uint64_t)pmm_alloc_frame();
-        memset((void*)new_table, 0, PAGE_SIZE);
+        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pdpt = (page_table_t*)(pml4->entries[pml4_i] & VMM_ADDR_MASK);
+    page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
     // Level 3 -> Level 2
     if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
-        uint64_t new_table = (uint64_t)pmm_alloc_frame();
-        memset((void*)new_table, 0, PAGE_SIZE);
+        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
+    page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
     // Level 2 -> Level 1
     if (!(pd->entries[pd_i] & PTE_PRESENT)) {
-        uint64_t new_table = (uint64_t)pmm_alloc_frame();
-        memset((void*)new_table, 0, PAGE_SIZE);
+        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pt = (page_table_t*)(pd->entries[pd_i] & VMM_ADDR_MASK);
+    page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
 
-    // Map final leaf entry
     pt->entries[pt_i] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
 
-    vmm_unlock();  // Unlock
+    vmm_unlock();
 }
 
 // 2MB
@@ -115,20 +124,20 @@ void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t f
     uint64_t pd_i   = PD_IDX(virt);
 
     if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
-        uint64_t new_table = (uint64_t)pmm_alloc_frame();
-        memset((void*)new_table, 0, PAGE_SIZE);
+        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pdpt = (page_table_t*)(pml4->entries[pml4_i] & VMM_ADDR_MASK);
+    page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
     if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
-        uint64_t new_table = (uint64_t)pmm_alloc_frame();
-        memset((void*)new_table, 0, PAGE_SIZE);
+        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
     }
-    page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
+    page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
-    pd->entries[pd_i] = (phys & VMM_ADDR_MASK) | flags | 0x81; 
+    pd->entries[pd_i] = (phys & VMM_ADDR_MASK) | flags | 0x81; // 0x81 = Present + Huge Page
 
     vmm_unlock();
 }
@@ -156,19 +165,22 @@ void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_
 // Returns the physical address or 0 if the page is not mapped.
 //
 uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt) {
-    // Traverse the 4-level page table hierarchy
     if (!(pml4->entries[PML4_IDX(virt)] & PTE_PRESENT)) return 0;
-    page_table_t* pdpt = (page_table_t*)(pml4->entries[PML4_IDX(virt)] & VMM_ADDR_MASK);
+    page_table_t* pdpt = vmm_get_table(pml4->entries[PML4_IDX(virt)] & VMM_ADDR_MASK);
 
     if (!(pdpt->entries[PDPT_IDX(virt)] & PTE_PRESENT)) return 0;
-    page_table_t* pd = (page_table_t*)(pdpt->entries[PDPT_IDX(virt)] & VMM_ADDR_MASK);
+    page_table_t* pd = vmm_get_table(pdpt->entries[PDPT_IDX(virt)] & VMM_ADDR_MASK);
+
+    // Check Huge Page (2MB)
+    if (pd->entries[PD_IDX(virt)] & (1 << 7)) {
+        return (pd->entries[PD_IDX(virt)] & 0xFFFFFFFFFE000000ULL) + (virt & 0x1FFFFF);
+    }
 
     if (!(pd->entries[PD_IDX(virt)] & PTE_PRESENT)) return 0;
-    page_table_t* pt = (page_table_t*)(pd->entries[PD_IDX(virt)] & VMM_ADDR_MASK);
+    page_table_t* pt = vmm_get_table(pd->entries[PD_IDX(virt)] & VMM_ADDR_MASK);
 
     if (!(pt->entries[PT_IDX(virt)] & PTE_PRESENT)) return 0;
 
-    // Physical address = (address from PT entry) + (12-bit offset from virtual address)
     return (pt->entries[PT_IDX(virt)] & VMM_ADDR_MASK) + (virt & 0xFFF);
 }
 
@@ -214,8 +226,6 @@ void vmm_init(BootInfo* bi) {
     for (uint64_t addr = 0; addr < 0x20000000; addr += PAGE_SIZE) {
         vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
-
-    kernel_pml4_phys = (uintptr_t)local_pml4;
 
     // 2.  DIRECT PHYSICAL MAPPING (HHDM)
     uint64_t desc_size = bi->mmap.descriptor_size;
@@ -271,6 +281,8 @@ void vmm_init(BootInfo* bi) {
         PTE_PRESENT
     );
 
+    kernel_pml4_phys = (uintptr_t)local_pml4;
+
     // 7. ENABLE NXE IN EFER MSR (No-Execute Enable)
     __asm__ volatile(
         "mov $0xC0000080, %%ecx\n"
@@ -295,17 +307,16 @@ void vmm_init(BootInfo* bi) {
 
     // 10. LOAD CR3 AND SWITCH STACK TO HIGHER HALF
     __asm__ volatile(
-        "mov %0, %%cr3\n\t"                  
-        "movabs $0xFFFF800000000000, %%rax\n\t"
-        "add %%rax, %%rsp\n\t"               
-        "add %%rax, %%rbp"                   
+        "mov %0, %%cr3\n\t" 
+        "add %1, %%rsp\n\t"        // Stack -> Higher Half
+        "add %1, %%rbp"            // Move RBP
         : 
-        : "r"(local_pml4) 
-        : "rax", "memory"
+        : "r"(kernel_pml4_phys), "r"(HHDM_OFFSET) 
+        : "memory"
     );
 
     // 11. SAFE TO ACCESS GLOBAL VARIABLES NOW
-    kernel_pml4 = local_pml4;
+    kernel_pml4 = (page_table_t*)phys_to_virt((uintptr_t)local_pml4);
 }
 
 // Getter

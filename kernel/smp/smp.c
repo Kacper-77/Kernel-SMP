@@ -15,6 +15,15 @@ extern uint8_t trampoline_end[];
  static uint64_t cpu_count = 1;
 
 void kernel_main_ap(cpu_context_t* ctx) {
+    // NXE for this CPU, IMPORATANT!
+    __asm__ volatile(
+        "mov $0xC0000080, %%ecx\n"
+        "rdmsr\n"
+        "or $0x800, %%eax\n"
+        "wrmsr\n"
+        ::: "ecx", "eax", "edx"
+    );
+
     cpu_init_context(ctx);
     
     gdt_reload_local();
