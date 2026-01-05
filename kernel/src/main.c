@@ -7,6 +7,7 @@
 #include <vmm.h>
 #include <apic.h>
 #include <smp.h>
+#include <std_funcs.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -26,25 +27,37 @@ __attribute__((sysv_abi, section(".text.entry")))
 void kernel_main(BootInfo *bi) {
     __asm__ volatile("cli");
     pmm_init(bi);
-    vmm_init(bi); 
+    vmm_init(bi);
+
+    BootInfo* bi_virt = (BootInfo*)phys_to_virt((uintptr_t)bi);
 
     __asm__ __volatile__ (
         "movabs $kernel_main_high, %%rax \n\t"
         "jmp *%%rax"
-        : : "D"(bi) : "rax"
+        : : "D"(bi_virt) : "rax"
     );
 
     while(1);
 }
 
 // High-half entry point
-void kernel_main_high(BootInfo *bi) {
-    gdt_init();
+void kernel_main_high(BootInfo *bi) {    
+    static cpu_context_t bsp_ctx;
+    memset(&bsp_ctx, 0, sizeof(cpu_context_t));
+    bsp_ctx.cpu_id = 0;
+    bsp_ctx.self = &bsp_ctx;
+
+    uint64_t current_rsp;
+    __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
+    bsp_ctx.kernel_stack = current_rsp;
+
+    cpu_init_context(&bsp_ctx);
+    gdt_setup_for_cpu(&bsp_ctx);
     idt_init();
     init_serial();
+
     kprint("###   Greetings from Higher Half!   ###\n");
 
-    // Re-verify PMM
     void* frame1 = pmm_alloc_frame();
     kprint("PMM Frame Test: "); kprint_hex((uintptr_t)frame1); kprint("\n");
 
@@ -52,17 +65,14 @@ void kernel_main_high(BootInfo *bi) {
     uint32_t gm = bi->fb.green_mask;
     uint32_t bm = bi->fb.blue_mask;
     
-    // Using the high virtual address for framebuffer
     volatile uint32_t *fb = (volatile uint32_t*)bi->fb.framebuffer_base;
     kprint("FB Virt: "); kprint_hex((uintptr_t)fb); kprint("\n");
     kprint("FB Size: "); kprint_hex((uintptr_t)bi->fb.framebuffer_size); kprint("\n");
 
     uint32_t stride = bi->fb.pixels_per_scanline;
-
     uint32_t cpu_count = 0;
 
     if (bi->acpi.rsdp != 0) {
-        // kprint("RSDP Phys: "); kprint_hex((uintptr_t)bi->acpi.rsdp); kprint("\n");
         acpi_rsdp_t *rsdp = (acpi_rsdp_t*)phys_to_virt((uintptr_t)bi->acpi.rsdp);
         kprint("RSDP Virt: "); kprint_hex((uintptr_t)rsdp); kprint("\n");
 
@@ -75,31 +85,19 @@ void kernel_main_high(BootInfo *bi) {
                                                 4096);
             lapic_init(v_lapic);
 
-            // SMP first test - not passed in 100% (more like 60%)
             kprint("Starting SMP initialization...\n");
             smp_init(bi);
 
             cpu_count = get_cpu_count_test();
-            // cpu_count++;
             
             uint32_t id = lapic_read(LAPIC_ID);
             kprint("APIC ID: "); kprint_hex(id >> 24); kprint("\n");
-
-            // uint8_t *ptr = (uint8_t *)madt + sizeof(acpi_madt_t);
-            // uint8_t *end = (uint8_t *)madt + madt->header.length;
-
-            // while (ptr < end) {
-            //     acpi_madt_entry_t *entry = (acpi_madt_entry_t *)ptr;
-            //     if (entry->type == 0) {
-            //         madt_entry_lapic_t *lapic = (madt_entry_lapic_t *)ptr;
-            //         if (lapic->flags & 1) cpu_count++;
-            //     }
-            //     ptr += entry->length;
-            // }
         }
     }
 
-    // Visual feedback
+    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x20000000);
+    kprint("Bootstrap mapping removed. Kernel is now isolated.\n");
+
     uint32_t blue = pack_rgb(0, 0, 255, rm, gm, bm);
     for (uint32_t i = 0; i < cpu_count; i++) {
         for (int y = 0; y < 20; y++) {

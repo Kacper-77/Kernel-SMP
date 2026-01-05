@@ -14,6 +14,7 @@ void pmm_init(BootInfo* boot_info);
 void* pmm_alloc_frame();
 void* pmm_alloc_frames(size_t count);
 void pmm_free_frame(void* frame);
+void pmm_move_to_high_half();
 
 // Internal helper functions
 void pmm_set_frame(uint64_t frame_addr);

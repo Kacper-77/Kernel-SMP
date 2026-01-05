@@ -315,11 +315,50 @@ void vmm_init(BootInfo* bi) {
         : "memory"
     );
 
+    // Move Bitmap to higher half 
+    pmm_move_to_high_half();
+
     // 11. SAFE TO ACCESS GLOBAL VARIABLES NOW
     kernel_pml4 = (page_table_t*)phys_to_virt((uintptr_t)local_pml4);
 }
 
-// Getter
+//
+// Cleanig Identity-Mapping
+//
+void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
+    vmm_lock();
+
+    uint64_t pml4_i = PML4_IDX(virt);
+    uint64_t pdpt_i = PDPT_IDX(virt);
+    uint64_t pd_i   = PD_IDX(virt);
+    uint64_t pt_i   = PT_IDX(virt);
+
+    if (!(pml4->entries[pml4_i] & PTE_PRESENT)) goto done;
+    page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
+
+    if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) goto done;
+    page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
+
+    if (!(pd->entries[pd_i] & PTE_PRESENT)) goto done;
+    page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
+
+    pt->entries[pt_i] = 0;
+    vmm_invlpg((void*)virt);
+
+done:
+    vmm_unlock();
+}
+
+void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {
+    uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    for (uint64_t i = 0; i < num_pages; i++) {
+        vmm_unmap(pml4, virt + (i * PAGE_SIZE));
+    }
+}
+
+//
+// GETTERS
+//
 page_table_t* vmm_get_pml4() {
     return kernel_pml4;
 }

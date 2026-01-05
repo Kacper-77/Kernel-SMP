@@ -8,7 +8,6 @@
 #include <std_funcs.h>
 #include <serial.h>
 
-// Symbole z binarnego bloba trampoliny
 extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
 
@@ -25,9 +24,11 @@ void kernel_main_ap(cpu_context_t* ctx) {
     );
 
     cpu_init_context(ctx);
-    
-    gdt_reload_local();
+    gdt_setup_for_cpu(ctx);
     idt_init();
+
+    cpu_context_t* self = get_cpu();
+    uint64_t my_id = self->cpu_id;
     
     vmm_enable_pat(); 
     lapic_init_ap();
@@ -81,7 +82,6 @@ void smp_init(BootInfo* bi) {
     acpi_madt_t* madt = (acpi_madt_t*)acpi_find_table(rsdp, "APIC");
     
     uint32_t bsp_lapic_id = lapic_read(LAPIC_ID) >> 24;
-    // uint64_t cpu_count = 1;
 
     uint8_t* ptr = (uint8_t*)madt + sizeof(acpi_madt_t);
     uint8_t* end = (uint8_t*)madt + madt->header.length;

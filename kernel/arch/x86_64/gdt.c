@@ -1,32 +1,8 @@
 #include <gdt.h>
+#include <cpu.h>
+#include <std_funcs.h>
 
 #include <stdint.h>
-
-//
-// GDT Entry structure
-// In x86_64, Base and Limit are mostly ignored in Long Mode for code/data,
-// but the L-bit (Long mode) and DPL (Privilege level) are crucial.
-//
-struct gdt_entry {
-    uint16_t limit_low;
-    uint16_t base_low;
-    uint8_t  base_middle;
-    uint8_t  access;
-    uint8_t  granularity;
-    uint8_t  base_high;
-} __attribute__((packed));
-
-//
-// GDTR structure - the pointer passed to the 'lgdt' instruction
-//
-struct gdt_ptr {
-    uint16_t limit;
-    uint64_t base;
-} __attribute__((packed));
-
-// GDT layout: [0] Null, [1] Kernel Code, [2] Kernel Data...
-static struct gdt_entry gdt[35];
-static struct gdt_ptr gdtr;
 
 //
 // External assembly helper to flush segment registers.
@@ -36,42 +12,45 @@ static struct gdt_ptr gdtr;
 extern void gdt_flush(uint64_t gdtr_ptr);
 
 //
-// Helper
+// SETUP FOR CPU
 //
-void gdt_set_entry(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
-    gdt[num].base_low    = (base & 0xFFFF);
-    gdt[num].base_middle = (base >> 16) & 0xFF;
-    gdt[num].base_high   = (base >> 24) & 0xFF;
+void gdt_setup_for_cpu(cpu_context_t* ctx) {
+    memset(&ctx->gdt, 0, sizeof(cpu_gdt_t));
 
-    gdt[num].limit_low   = (limit & 0xFFFF);
-    gdt[num].granularity = (limit >> 16) & 0x0F;
+    // 1. 
+    // CODE/DATA
+    ctx->gdt.entries[1].access = 0x9A;
+    ctx->gdt.entries[1].granularity = 0x20;
+    // KERNEL DATA
+    ctx->gdt.entries[2].access = 0x92;
+    ctx->gdt.entries[2].granularity = 0x00;
+    // USER CODE
+    ctx->gdt.entries[3].access = 0xFA;
+    ctx->gdt.entries[3].granularity = 0x20;
+    // USER DATA
+    ctx->gdt.entries[4].access = 0xF2;
+    ctx->gdt.entries[4].granularity = 0x00;
 
-    gdt[num].granularity |= gran & 0xF0;
-    gdt[num].access      = access;
-}
+    // 2. TSS CONFIG
+    uintptr_t tss_addr = (uintptr_t)&ctx->tss;
+    memset(&ctx->tss, 0, sizeof(tss_t));
+    ctx->tss.rsp0 = ctx->kernel_stack;
+    ctx->tss.iopb_offset = sizeof(tss_t);
 
-void gdt_reload_local() {
-    gdtr.limit = sizeof(gdt) - 1;
-    gdtr.base = (uintptr_t)&gdt;
-    gdt_flush((uintptr_t)&gdtr);
-}
+    ctx->gdt.tss_entry.limit_low = sizeof(tss_t) - 1;
+    ctx->gdt.tss_entry.base_low = tss_addr & 0xFFFF;
+    ctx->gdt.tss_entry.base_mid = (tss_addr >> 16) & 0xFF;
+    ctx->gdt.tss_entry.flags1 = 0x89;  // Present, 64-bit TSS (Available)
+    ctx->gdt.tss_entry.base_high_mid = (tss_addr >> 24) & 0xFF;
+    ctx->gdt.tss_entry.base_high = (tss_addr >> 32) & 0xFFFFFFFF;
 
-//
-// INIT
-//
-void gdt_init() {
-    for(int i = 0; i < 35; i++) {
-        gdt[i] = (struct gdt_entry){0, 0, 0, 0, 0, 0};
-    }
+    // 3. GDTR SETUP
+    ctx->gdt_ptr.limit = sizeof(cpu_gdt_t) - 1;
+    ctx->gdt_ptr.base = (uintptr_t)&ctx->gdt;
 
-    // 0x00: Null
-    gdt_set_entry(0, 0, 0, 0, 0);
+    // 4. LOAD
+    gdt_flush((uintptr_t)&ctx->gdt_ptr);
 
-    // 0x08: Kernel Code (Long Mode: Access 0x9A, Granularity 0x20)
-    gdt_set_entry(1, 0, 0xFFFFFFFF, 0x9A, 0x20);
-
-    // 0x10: Kernel Data (Access 0x92, Granularity 0x00)
-    gdt_set_entry(2, 0, 0xFFFFFFFF, 0x92, 0x00);
-
-    gdt_reload_local();
+    // 5. LOAD TASK REGISTER
+    __asm__ volatile ("ltr %%ax" : : "a"((uint16_t)0x28));
 }

@@ -45,6 +45,8 @@ uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt);
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
 void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size);
 void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags);
+void vmm_unmap(page_table_t* pml4, uintptr_t virt);
+void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size);
 
 page_table_t* vmm_get_pml4();
 uintptr_t vmm_get_pml4_phys();

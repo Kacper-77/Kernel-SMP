@@ -21,6 +21,8 @@ static void pmm_unlock() {
     __sync_lock_release(&pmm_lock_.lock);
 }
 
+#define HHDM_OFFSET 0xFFFF800000000000
+
 //
 // Helpers
 //
@@ -181,4 +183,13 @@ void pmm_free_frame(void* frame) {
     }
     
     pmm_unlock();
+}
+
+//
+// Need to be called after CR3 is loaded
+//
+void pmm_move_to_high_half() {
+    if (bitmap != NULL && (uintptr_t)bitmap < HHDM_OFFSET) {
+        bitmap = (uint8_t*)phys_to_virt((uintptr_t)bitmap);
+    }
 }
