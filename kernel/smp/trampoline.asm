@@ -46,13 +46,20 @@ protected_mode:
 long_mode:
     mov ax, 0x20
     mov ds, ax
+    mov es, ax
     mov ss, ax
+    mov fs, ax
+    mov gs, ax
 
-    mov rdi, [0x7000 + 24] ; RDI
+    mov rdi, [0x7000 + 24] ; cpu_context_p
     mov rsp, [0x7000 + 0]  ; trampoline_stack
-    mov rax, [0x7000 + 16] ; trampoline_entry
     
-    mov qword [0x7000 + 32], 1
+    ; ALLIGN STACK
+    and rsp, -16               ; allign RSP
+    sub rsp, 8            
+                          
+    mov rax, [0x7000 + 16]     ; trampoline_entry (kernel_main_ap)
+    mov qword [0x7000 + 32], 1 ; trampoline_ready
 
     jmp rax
 

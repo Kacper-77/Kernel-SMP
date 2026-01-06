@@ -1,10 +1,10 @@
 #include <pmm.h>
 #include <vmm.h>
+#include <cpu.h>
 #include <efi_descriptor.h>
 
 uint8_t* bitmap = NULL;
 uint64_t bitmap_size = 0;
-static uint64_t last_checked_index = 0; // Optimization for searching
 
 //
 // Atomic
@@ -96,9 +96,6 @@ void pmm_init(BootInfo* boot_info) {
     for (uint64_t i = 0; i < (bitmap_size + PAGE_SIZE - 1) / PAGE_SIZE; i++) {
         pmm_set_frame(bitmap_addr + (i * PAGE_SIZE));
     }
-    
-    // Safety check
-    last_checked_index = 0;
 }
 
 //
@@ -107,10 +104,14 @@ void pmm_init(BootInfo* boot_info) {
 void* pmm_alloc_frame() {
     if (bitmap == NULL) return NULL;
     
-    // Lock before start
     pmm_lock();
 
-    for (uint64_t i = last_checked_index; i < bitmap_size; i++) {
+    // Get current CPU context
+    cpu_context_t* cpu = get_cpu();
+    // If not we use default value
+    uint64_t start_index = cpu ? cpu->pmm_last_index : 0;
+
+    for (uint64_t i = start_index; i < bitmap_size; i++) {
         if (bitmap[i] == 0xFF) continue;
 
         for (int b = 0; b < 8; b++) {
@@ -120,16 +121,16 @@ void* pmm_alloc_frame() {
 
                 if (frame_addr == 0) continue; 
 
-                uint64_t idx = frame_index / 8;
-                bitmap[idx] |= (1 << (frame_index % 8));
+                bitmap[i] |= (1 << b);
                 
-                last_checked_index = i;
-                pmm_unlock();  // Unlock
+                if (cpu) cpu->pmm_last_index = i;
+
+                pmm_unlock();
                 return (void*)frame_addr;
             }
         }
     }
-    pmm_unlock(); // Unlock even if frame haven't found
+    pmm_unlock(); // Unlock even if frame wasn't found
     return NULL; 
 }
 
@@ -169,19 +170,19 @@ void* pmm_alloc_frames(size_t count) {
 }
 
 void pmm_free_frame(void* frame) {
-    if (!frame) return;
+if (!frame) return;
 
     pmm_lock();
 
     uint64_t addr = (uint64_t)frame;
     pmm_unset_frame(addr);
 
-    // After freeing, update last_checked_index to look here next time
+    cpu_context_t* cpu = get_cpu();
     uint64_t frame_index = (addr / PAGE_SIZE) / 8;
-    if (frame_index < last_checked_index) {
-        last_checked_index = frame_index;
-    }
     
+    if (cpu && frame_index < cpu->pmm_last_index) {
+        cpu->pmm_last_index = frame_index;
+    }
     pmm_unlock();
 }
 

@@ -3,15 +3,20 @@
 #include <pmm.h>
 #include <gdt.h>
 #include <idt.h>
+#include <cpu.h>
 #include <apic.h>
 #include <acpi.h>
 #include <std_funcs.h>
 #include <serial.h>
 
+#include <test.h>
+
+BootInfo* g_bi = NULL;
+
 extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
 
- static uint64_t cpu_count = 1;
+static uint64_t cpu_count = 2;
 
 void kernel_main_ap(cpu_context_t* ctx) {
     // NXE for this CPU, IMPORATANT!
@@ -23,15 +28,20 @@ void kernel_main_ap(cpu_context_t* ctx) {
         ::: "ecx", "eax", "edx"
     );
 
+    cpu_enable_sse();
+
     cpu_init_context(ctx);
     gdt_setup_for_cpu(ctx);
     idt_init();
-
-    cpu_context_t* self = get_cpu();
-    uint64_t my_id = self->cpu_id;
     
     vmm_enable_pat(); 
     lapic_init_ap();
+
+    if (g_bi) {
+    draw_test_squares_safe(ctx->cpu_id, 
+                           (uint32_t*)g_bi->fb.framebuffer_base, 
+                           g_bi->fb.pixels_per_scanline);
+    }
     
     kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");
     
@@ -53,7 +63,7 @@ void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
            trampoline_size);
 
     // Alloc context and pages
-    cpu_context_t* ctx = (cpu_context_t*)phys_to_virt((uintptr_t)pmm_alloc_frame());  // !!!!!!!!!!!!!!!!!!!!!
+    cpu_context_t* ctx = (cpu_context_t*)phys_to_virt((uintptr_t)pmm_alloc_frame());
     memset(ctx, 0, sizeof(cpu_context_t));
     ctx->cpu_id = cpu_id;
     ctx->lapic_id = lapic_id;
@@ -78,6 +88,7 @@ void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
 }
 
 void smp_init(BootInfo* bi) {
+    g_bi = bi;
     acpi_rsdp_t* rsdp = (acpi_rsdp_t*)phys_to_virt((uintptr_t)bi->acpi.rsdp);
     acpi_madt_t* madt = (acpi_madt_t*)acpi_find_table(rsdp, "APIC");
     

@@ -27,10 +27,9 @@ struct gdt_tss_descriptor {
 } __attribute__((packed));
 
 //
-// Initializes the Global Descriptor Table.
+// Initializes the Descriptor Table.
 // Sets up Null, Kernel Code, and Kernel Data segments,
 // then flushes the segment registers.
-//
 //
 void gdt_setup_for_cpu(cpu_context_t* ctx);
 

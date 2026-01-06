@@ -61,11 +61,21 @@ typedef struct cpu_context {
     
     // Kernel Stack
     uint64_t kernel_stack;
+    
+    uint64_t pmm_last_index;
 } __attribute__((packed)) cpu_context_t;
 
 static inline cpu_context_t* get_cpu() {
+    uint32_t low, high;
+    // Read GS_MSR 0xC0000101
+    __asm__ volatile ("rdmsr" : "=a"(low), "=d"(high) : "c"(0xC0000101));
+    
+    uint64_t base = ((uintptr_t)high << 32) | low;
+    if (base < 0xFFFF800000000000ULL) {
+        return (cpu_context_t*)0;
+    }
+
     cpu_context_t* ptr;
-    // Addr from first field
     __asm__ volatile ("movq %%gs:0, %0" : "=r"(ptr)); 
     return ptr;
 }
@@ -75,6 +85,22 @@ static inline void cpu_init_context(cpu_context_t* ctx) {
     uint32_t low = (uint32_t)(uintptr_t)ctx;
     uint32_t high = (uint32_t)((uintptr_t)ctx >> 32);
     __asm__ volatile ("wrmsr" : : "a"(low), "d"(high), "c"(0xC0000101) : "memory");
+}
+
+static inline void cpu_enable_sse() {
+    uint64_t cr4;
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1 << 5);  // PAE
+    cr4 |= (1 << 9);  // OSFXSR
+    cr4 |= (1 << 10); // OSXMMEXCPT
+    __asm__ volatile("mov %0, %%cr4" :: "r"(cr4));
+
+    // CR0: MP (bit 1), ET (bit 4), NE (bit 5)
+    uint64_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1 << 2); // Clear EM
+    cr0 |= (1 << 1);  // Set MP
+    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
 }
 
 #endif
