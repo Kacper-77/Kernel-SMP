@@ -9,6 +9,9 @@ static uintptr_t kernel_pml4_phys = 0;
 // Symbols from the new linker script
 extern uint8_t _kernel_start[];
 extern uint8_t _kernel_end[];
+extern uint8_t _text_start[], _text_end[];
+extern uint8_t _rodata_start[], _rodata_end[];
+extern uint8_t _data_start[], _data_end[];
 
 // Physical address where the kernel is loaded
 #define KERNEL_PHYS_BASE 0x2000000
@@ -244,9 +247,22 @@ void vmm_init(BootInfo* bi) {
     }
 
     // 3. HIGHER HALF KERNEL MAPPING
-    size_t kernel_size = (size_t)(_kernel_end - _kernel_start);
-    vmm_map_range(local_pml4, KERNEL_VIRT_BASE, KERNEL_PHYS_BASE, kernel_size,
-                PTE_PRESENT | PTE_WRITABLE);
+    uintptr_t text_phys = KERNEL_PHYS_BASE + ((uintptr_t)_text_start - KERNEL_VIRT_BASE);
+    size_t text_size = (size_t)(_text_end - _text_start);
+    vmm_map_range(local_pml4, (uintptr_t)_text_start, text_phys, text_size, 
+                PTE_PRESENT);
+
+    // 3.1 Read-Only Data (.rodata)
+    uintptr_t rodata_phys = KERNEL_PHYS_BASE + ((uintptr_t)_rodata_start - KERNEL_VIRT_BASE);
+    size_t rodata_size = (size_t)(_rodata_end - _rodata_start);
+    vmm_map_range(local_pml4, (uintptr_t)_rodata_start, rodata_phys, rodata_size, 
+                PTE_PRESENT | PTE_NX);
+
+    // 3.2 (.data / .bss)
+    uintptr_t data_phys = KERNEL_PHYS_BASE + ((uintptr_t)_data_start - KERNEL_VIRT_BASE);
+    size_t data_size = (size_t)(_data_end - _data_start);
+    vmm_map_range(local_pml4, (uintptr_t)_data_start, data_phys, data_size, 
+                PTE_PRESENT | PTE_WRITABLE | PTE_NX);
 
 
     // 4. MAP THE STACK
@@ -259,7 +275,7 @@ void vmm_init(BootInfo* bi) {
     for (int i = 0; i < stack_pages; i++) {
         uintptr_t phys_addr = stack_page - (i * PAGE_SIZE);
         uintptr_t virt_addr = phys_to_virt(phys_addr);
-        vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE);
+        vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
     }
 
     // 5. MAP THE FRAMEBUFFER

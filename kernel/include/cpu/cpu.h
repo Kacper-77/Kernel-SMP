@@ -65,6 +65,8 @@ typedef struct cpu_context {
     uint64_t pmm_last_index;
 } __attribute__((packed)) cpu_context_t;
 
+void cpu_init_bsp();
+
 static inline cpu_context_t* get_cpu() {
     uint32_t low, high;
     // Read GS_MSR 0xC0000101

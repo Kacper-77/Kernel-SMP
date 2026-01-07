@@ -8,38 +8,11 @@
 #include <apic.h>
 #include <smp.h>
 #include <std_funcs.h>
-
+#include <cpu.h>
 #include <test.h>
 
 #include <stdint.h>
 #include <stddef.h>
-
-//
-// INIT BSP - WILL BE MOVED
-//
-static inline void cpu_init_bsp() {
-    // 1. Alloc context
-    cpu_context_t* ctx = (cpu_context_t*)phys_to_virt((uintptr_t)pmm_alloc_frame());
-    memset(ctx, 0, sizeof(cpu_context_t));
-
-    // 2. Basic data
-    ctx->self = ctx;
-    ctx->cpu_id = 1;
-    ctx->lapic_id = 0;
-    ctx->pmm_last_index = 0;
-
-    // 3. Stack
-    uint64_t current_rsp;
-    __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
-    ctx->kernel_stack = current_rsp;
-
-    // 4. MSR GS_BASE
-    cpu_init_context(ctx);
-
-    // 5. GDT and SSE
-    gdt_setup_for_cpu(ctx);
-    cpu_enable_sse();
-}
 
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
@@ -54,6 +27,7 @@ void kernel_main(BootInfo *bi) {
     );
     __asm__ volatile("cli");
     pmm_init(bi);
+    init_serial();
     vmm_init(bi);
 
     BootInfo* bi_virt = (BootInfo*)phys_to_virt((uintptr_t)bi);
@@ -72,7 +46,6 @@ void kernel_main_high(BootInfo *bi) {
     cpu_init_bsp();
     
     idt_init();
-    init_serial();
 
     kprint("###   Greetings from Higher Half!   ###\n");
 
