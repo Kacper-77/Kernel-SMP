@@ -19,7 +19,7 @@ extern uint8_t trampoline_end[];
 static uint64_t cpu_count = 2;
 
 void kernel_main_ap(cpu_context_t* ctx) {
-    // NXE for this CPU, IMPORATANT!
+    // NXE
     __asm__ volatile(
         "mov $0xC0000080, %%ecx\n"
         "rdmsr\n"

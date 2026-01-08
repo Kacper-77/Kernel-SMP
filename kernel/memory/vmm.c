@@ -1,7 +1,8 @@
 #include <vmm.h>
 #include <pmm.h>
-#include <efi_descriptor.h>
+#include <spinlock.h>
 #include <std_funcs.h>
+#include <efi_descriptor.h>
 
 static page_table_t* kernel_pml4 = NULL;
 static uintptr_t kernel_pml4_phys = 0;
@@ -25,17 +26,7 @@ extern uint8_t _data_start[], _data_end[];
 //
 // Atomic
 //
-static vmm_lock_t vmm_lock_ = {0};
-
-static void vmm_lock() {
-    while (__sync_lock_test_and_set(&vmm_lock_.lock, 1)) {
-        __asm__ volatile("pause");
-    }
-}
-
-static void vmm_unlock() {
-    __sync_lock_release(&vmm_lock_.lock);
-}
+static spinlock_t vmm_lock_ = {0};
 
 //
 // Helper
@@ -82,7 +73,7 @@ void vmm_enable_pat() {
 // If intermediate tables don't exist, they are allocated using PMM.
 //
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
-    vmm_lock();
+    spin_lock(&vmm_lock_);
 
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -115,12 +106,12 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
 
     pt->entries[pt_i] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
 
-    vmm_unlock();
+    spin_unlock(&vmm_lock_);
 }
 
 // 2MB
 void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
-    vmm_lock();
+    spin_lock(&vmm_lock_);
 
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -142,7 +133,7 @@ void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t f
 
     pd->entries[pd_i] = (phys & VMM_ADDR_MASK) | flags | 0x81; // 0x81 = Present + Huge Page
 
-    vmm_unlock();
+    spin_unlock(&vmm_lock_);
 }
 
 //
@@ -342,7 +333,7 @@ void vmm_init(BootInfo* bi) {
 // Cleanig Identity-Mapping
 //
 void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
-    vmm_lock();
+    spin_lock(&vmm_lock_);
 
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -362,7 +353,7 @@ void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
     vmm_invlpg((void*)virt);
 
 done:
-    vmm_unlock();
+    spin_unlock(&vmm_lock_);
 }
 
 void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {

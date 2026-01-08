@@ -31,4 +31,10 @@ static inline void* memcpy(void* dest, const void* src, size_t n) {
     return dest;
 }
 
+static inline char* strcpy(char* dest, const char* src) {
+    char* d = dest;
+    while ((*d++ = *src++));
+    return dest;
+}
+
 #endif

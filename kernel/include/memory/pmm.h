@@ -21,9 +21,4 @@ void pmm_set_frame(uint64_t frame_addr);
 void pmm_unset_frame(uint64_t frame_addr);
 int pmm_is_frame_set(uint64_t frame_addr);
 
-// Atomic
-typedef struct {
-    volatile int lock;
-} pmm_lock_t;
-
 #endif

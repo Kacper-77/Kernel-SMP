@@ -10,9 +10,14 @@
 #include <std_funcs.h>
 #include <cpu.h>
 #include <test.h>
+#include <kmalloc.h>
+#include <spinlock.h>
 
 #include <stdint.h>
 #include <stddef.h>
+
+// Global spinlock flag
+int g_lock_enabled = 0;
 
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
@@ -42,12 +47,36 @@ void kernel_main(BootInfo *bi) {
 }
 
 // High-half entry point
-void kernel_main_high(BootInfo *bi) {  
+void kernel_main_high(BootInfo *bi) {
     cpu_init_bsp();
     
     idt_init();
 
     kprint("###   Greetings from Higher Half!   ###\n");
+    
+    kmalloc_init(); kprint("Heap initialized.\n");
+
+    void* ptr1 = kmalloc(128);
+    void* ptr2 = kmalloc(256);
+    
+    kprint("ptr1: "); kprint_hex((uintptr_t)ptr1); kprint("\n");
+    kprint("ptr2: "); kprint_hex((uintptr_t)ptr2); kprint("\n");
+
+    if (ptr1 && ptr2) {
+        strcpy((char*)ptr1, "HEAP WORKS FINE!");
+        kprint("Data in ptr1: ");
+        kprint((char*)ptr1); 
+        kprint("\n");
+    }
+
+    kfree(ptr1);
+    
+    kprint("Post-free data in ptr1 [should be same as before]: "); kprint((char*)ptr1); kprint("\n");
+
+    // BSP
+    draw_test_squares_safe(1, 
+                           (uint32_t*)bi->fb.framebuffer_base, 
+                           bi->fb.pixels_per_scanline);
 
     if (bi->acpi.rsdp != 0) {
         acpi_rsdp_t *rsdp = (acpi_rsdp_t*)phys_to_virt((uintptr_t)bi->acpi.rsdp);
@@ -59,7 +88,7 @@ void kernel_main_high(BootInfo *bi) {
                                                 (uintptr_t)madt->local_apic_address, 
                                                 4096);
             lapic_init(v_lapic);
-            
+            g_lock_enabled = 1;
             kprint("Starting SMP initialization...\n");
             smp_init(bi);
         }
@@ -67,11 +96,6 @@ void kernel_main_high(BootInfo *bi) {
 
     vmm_unmap_range(vmm_get_pml4(), 0x0, 0x20000000);
     kprint("Kernel isolated.\n");
-
-    // BSP
-    draw_test_squares_safe(1, 
-                           (uint32_t*)bi->fb.framebuffer_base, 
-                           bi->fb.pixels_per_scanline);
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
     for (;;) { __asm__ __volatile__("hlt"); }

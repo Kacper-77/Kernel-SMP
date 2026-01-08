@@ -1,6 +1,7 @@
 #include <pmm.h>
 #include <vmm.h>
 #include <cpu.h>
+#include <spinlock.h>
 #include <efi_descriptor.h>
 
 uint8_t* bitmap = NULL;
@@ -9,17 +10,7 @@ uint64_t bitmap_size = 0;
 //
 // Atomic
 //
-static pmm_lock_t pmm_lock_ = {0};
-
-static void pmm_lock() {
-    while (__sync_lock_test_and_set(&pmm_lock_.lock, 1)) {
-        __asm__ volatile("pause");
-    }
-}
-
-static void pmm_unlock() {
-    __sync_lock_release(&pmm_lock_.lock);
-}
+static spinlock_t pmm_lock_ = {0};
 
 #define HHDM_OFFSET 0xFFFF800000000000
 
@@ -104,7 +95,7 @@ void pmm_init(BootInfo* boot_info) {
 void* pmm_alloc_frame() {
     if (bitmap == NULL) return NULL;
     
-    pmm_lock();
+    spin_lock(&pmm_lock_);
 
     // Get current CPU context
     cpu_context_t* cpu = get_cpu();
@@ -125,19 +116,19 @@ void* pmm_alloc_frame() {
                 
                 if (cpu) cpu->pmm_last_index = i;
 
-                pmm_unlock();
+                spin_unlock(&pmm_lock_);
                 return (void*)frame_addr;
             }
         }
     }
-    pmm_unlock(); // Unlock even if frame wasn't found
+    spin_unlock(&pmm_lock_); // Unlock even if frame wasn't found
     return NULL; 
 }
 
 void* pmm_alloc_frames(size_t count) {
     if (bitmap == NULL || count == 0) return NULL;
 
-    pmm_lock();
+    spin_lock(&pmm_lock_);
 
     uint64_t total_bits = bitmap_size * 8;
 
@@ -160,19 +151,19 @@ void* pmm_alloc_frames(size_t count) {
             }
 
             uint64_t phys_addr = i * PAGE_SIZE;
-            pmm_unlock();
+            spin_unlock(&pmm_lock_);
             return (void*)phys_addr;
         }
     }
 
-    pmm_unlock();
+    spin_unlock(&pmm_lock_);
     return NULL;
 }
 
 void pmm_free_frame(void* frame) {
 if (!frame) return;
 
-    pmm_lock();
+    spin_lock(&pmm_lock_);
 
     uint64_t addr = (uint64_t)frame;
     pmm_unset_frame(addr);
@@ -183,7 +174,7 @@ if (!frame) return;
     if (cpu && frame_index < cpu->pmm_last_index) {
         cpu->pmm_last_index = frame_index;
     }
-    pmm_unlock();
+    spin_unlock(&pmm_lock_);
 }
 
 //
