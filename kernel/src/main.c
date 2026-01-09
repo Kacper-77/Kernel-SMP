@@ -56,22 +56,32 @@ void kernel_main_high(BootInfo *bi) {
     
     kmalloc_init(); kprint("Heap initialized.\n");
 
-    void* ptr1 = kmalloc(128);
-    void* ptr2 = kmalloc(256);
-    
-    kprint("ptr1: "); kprint_hex((uintptr_t)ptr1); kprint("\n");
-    kprint("ptr2: "); kprint_hex((uintptr_t)ptr2); kprint("\n");
+    kprint("Starting Coalescing Test\n");
 
-    if (ptr1 && ptr2) {
-        strcpy((char*)ptr1, "HEAP WORKS FINE!");
-        kprint("Data in ptr1: ");
-        kprint((char*)ptr1); 
-        kprint("\n");
+    void* t1 = kmalloc(100);
+    void* t2 = kmalloc(100);
+    void* t3 = kmalloc(100);
+
+    kprint("t1: "); kprint_hex((uintptr_t)t1); kprint("\n");
+    kprint("t2: "); kprint_hex((uintptr_t)t2); kprint("\n");
+    kprint("t3: "); kprint_hex((uintptr_t)t3); kprint("\n");
+
+    kfree(t1);
+    kfree(t2);
+    
+    void* t4 = kmalloc(200);
+    kprint("t4 (should reuse t1 space): "); kprint_hex((uintptr_t)t4); kprint("\n");
+
+    if (t4 == t1) {
+        kprint("SUCCESS: Coalescing works! t4 reused and merged t1+t2.\n");
+    } else {
+        kprint("DEBUG: t4 is at: "); kprint_hex((uintptr_t)t4); kprint("\n");
     }
 
-    kfree(ptr1);
-    
-    kprint("Post-free data in ptr1 [should be same as before]: "); kprint((char*)ptr1); kprint("\n");
+    strcpy((char*)t4, "## DATA SAVED IN T4 ##\n");
+    kprint((char*)t4); kprint("\n");
+
+    kmalloc_dump();
 
     // BSP
     draw_test_squares_safe(1, 

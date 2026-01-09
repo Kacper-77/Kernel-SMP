@@ -3,6 +3,7 @@
 #include <vmm.h>
 #include <spinlock.h>
 #include <std_funcs.h>
+#include <serial.h>
 
 typedef struct m_header {
     uint32_t magic;
@@ -17,9 +18,37 @@ typedef struct m_header {
 static spinlock_t heap_lock_ = {0};
 static m_header_t* heap_start = NULL;
 
-// Helper
+//
+// Helper AND LOGS
+//
 static size_t align(size_t size) {
     return (size + 15) & ~15;
+}
+
+static void kpanic(const char* message) {
+    kprint("\n!!! KERNEL PANIC !!!\n");
+    kprint(message);
+    kprint("\nSystem halted.");
+    __asm__ volatile("cli");
+    for (;;) { __asm__ volatile("hlt"); }
+}
+
+//
+// DIAGNOSTIC
+//
+void kmalloc_dump() {
+    spin_lock(&heap_lock_);
+    kprint("\n--- HEAP DUMP ---\n");
+    m_header_t* curr = heap_start;
+    while (curr) {
+        kprint("Block: "); kprint_hex((uintptr_t)curr);
+        kprint(" | Size: "); kprint_hex(curr->size);
+        kprint(" | Free: "); kprint(curr->is_free ? "YES" : "NO");
+        kprint("\n");
+        curr = curr->next;
+    }
+    kprint("-----------------\n");
+    spin_unlock(&heap_lock_);
 }
 
 //
@@ -29,7 +58,10 @@ void kmalloc_init() {
     spin_lock(&heap_lock_);
 
     void* first_frame = pmm_alloc_frame();
-    if (!first_frame) return; // KPANIC - LATER
+    if (!first_frame) {
+        kpanic("KMALLOC: Failed to allocate first frame for heap!");
+        return;
+    } 
 
     uintptr_t virt_addr = phys_to_virt((uintptr_t)first_frame);
     memset((void*)virt_addr, 0, 4096);
@@ -123,17 +155,31 @@ void* kmalloc(size_t size) {
 void kfree(void* ptr) {
     if (!ptr) return;
 
-    // Back to header
+    // Get header
     m_header_t* header = (m_header_t*)((uintptr_t)ptr - sizeof(m_header_t));
 
+    // Verify magic number
     if (header->magic != KMALLOC_MAGIC) {
-        // KPANIC - LATER
-        return;
+        kpanic("KMALLOC: Heap corruption detected (Invalid Magic Number)!");
     }
 
     spin_lock(&heap_lock_);
-    header->is_free = 1;
     
-    // COALESCING - LATER
+    // Set block as free
+    header->is_free = 1;
+
+    // COALESCING
+    m_header_t* current = heap_start;
+    while (current != NULL && current->next != NULL) {
+        if (current->is_free && current->next->is_free) {
+            // NEW SIZE: old size + next header + next data
+            current->size += current->next->size + sizeof(m_header_t);
+            
+            current->next = current->next->next;
+            continue; 
+        }
+        current = current->next;
+    }
+
     spin_unlock(&heap_lock_);
 }
