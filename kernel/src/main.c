@@ -101,6 +101,8 @@ void kernel_main_high(BootInfo *bi) {
             g_lock_enabled = 1;
             kprint("Starting SMP initialization...\n");
             smp_init(bi);
+
+            kmalloc_dump();
         }
     }
 

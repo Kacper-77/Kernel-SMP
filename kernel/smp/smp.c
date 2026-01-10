@@ -6,6 +6,7 @@
 #include <cpu.h>
 #include <apic.h>
 #include <acpi.h>
+#include <kmalloc.h>
 #include <std_funcs.h>
 #include <serial.h>
 
@@ -41,6 +42,14 @@ void kernel_main_ap(cpu_context_t* ctx) {
     draw_test_squares_safe(ctx->cpu_id, 
                            (uint32_t*)g_bi->fb.framebuffer_base, 
                            g_bi->fb.pixels_per_scanline);
+    }
+
+    // HEAP TEST
+    char* ap_message = (char*)kmalloc(64);
+    if (ap_message) {
+        strcpy(ap_message, "CPU ");
+        ap_message[4] = (char)(ctx->cpu_id + '0'); 
+        strcpy(ap_message + 5, " ALLOCATED OK");
     }
     
     kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");
