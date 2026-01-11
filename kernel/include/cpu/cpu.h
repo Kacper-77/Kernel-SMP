@@ -63,29 +63,26 @@ typedef struct cpu_context {
     uint64_t kernel_stack;
     
     uint64_t pmm_last_index;
+    uint32_t lapic_ticks_per_ms;
 } __attribute__((packed)) cpu_context_t;
 
 void cpu_init_bsp();
 
 static inline cpu_context_t* get_cpu() {
-    uint32_t low, high;
-    // Read GS_MSR 0xC0000101
-    __asm__ volatile ("rdmsr" : "=a"(low), "=d"(high) : "c"(0xC0000101));
-    
-    uint64_t base = ((uintptr_t)high << 32) | low;
-    if (base < 0xFFFF800000000000ULL) {
-        return (cpu_context_t*)0;
-    }
-
     cpu_context_t* ptr;
+
     __asm__ volatile ("movq %%gs:0, %0" : "=r"(ptr)); 
     return ptr;
 }
 
-// Helper MSR_GS_BASE = 0xC0000101
 static inline void cpu_init_context(cpu_context_t* ctx) {
-    uint32_t low = (uint32_t)(uintptr_t)ctx;
-    uint32_t high = (uint32_t)((uintptr_t)ctx >> 32);
+    ctx->self = ctx;
+
+    uint64_t addr = (uintptr_t)ctx;
+    uint32_t low = (uint32_t)(addr & 0xFFFFFFFF);
+    uint32_t high = (uint32_t)(addr >> 32);
+    
+    // MSR_GS_BASE (0xC0000101)
     __asm__ volatile ("wrmsr" : : "a"(low), "d"(high), "c"(0xC0000101) : "memory");
 }
 

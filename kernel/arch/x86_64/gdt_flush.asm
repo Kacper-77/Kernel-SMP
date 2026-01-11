@@ -11,7 +11,6 @@ gdt_flush:
     mov ds, ax
     mov es, ax
     mov fs, ax
-    mov gs, ax
     mov ss, ax
 
     ; Reload Code Segment (CS)

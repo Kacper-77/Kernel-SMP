@@ -40,5 +40,7 @@ void lapic_init_ap();
 void lapic_write(uint32_t reg, uint32_t data);
 uint32_t lapic_read(uint32_t reg);
 void lapic_send_eoi();
+void lapic_timer_init(uint32_t ms_interval, uint8_t vector);
+void lapic_timer_calibrate();
 
 #endif

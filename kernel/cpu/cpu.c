@@ -14,8 +14,7 @@ void cpu_init_bsp() {
 
     // 2. Basic data
     ctx->self = ctx;
-    ctx->cpu_id = 1;
-    ctx->lapic_id = 0;
+    ctx->cpu_id = 0;
     ctx->pmm_last_index = 0;
 
     // 3. Stack
@@ -23,10 +22,10 @@ void cpu_init_bsp() {
     __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
     ctx->kernel_stack = current_rsp;
 
-    // 4. MSR GS_BASE
-    cpu_init_context(ctx);
-
-    // 5. GDT and SSE
+    // 4. GDT and SSE
     gdt_setup_for_cpu(ctx);
     cpu_enable_sse();
+
+    // 5. MSR GS_BASE
+    cpu_init_context(ctx);
 }

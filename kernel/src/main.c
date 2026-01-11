@@ -99,6 +99,10 @@ void kernel_main_high(BootInfo *bi) {
                                                 4096);
             lapic_init(v_lapic);
             g_lock_enabled = 1;
+
+            lapic_timer_calibrate();
+            lapic_timer_init(10, 32);
+
             kprint("Starting SMP initialization...\n");
             smp_init(bi);
 
@@ -108,6 +112,15 @@ void kernel_main_high(BootInfo *bi) {
 
     vmm_unmap_range(vmm_get_pml4(), 0x0, 0x20000000);
     kprint("Kernel isolated.\n");
+
+    __asm__ volatile("sti");
+
+    kprint("Testing timer (waiting 5 seconds)...\n");
+    uint64_t start = get_uptime_ms();
+    while(get_uptime_ms() < start + 5000) {
+        __asm__ volatile("pause");
+    }
+    kprint("Timer TEST PASSED!\n");
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
     for (;;) { __asm__ __volatile__("hlt"); }

@@ -32,5 +32,6 @@ struct idt_ptr {
 } __attribute__((packed));
 
 void idt_init(void);
+uint64_t get_uptime_ms();
 
 #endif

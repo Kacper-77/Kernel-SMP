@@ -17,7 +17,7 @@ BootInfo* g_bi = NULL;
 extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
 
-static uint64_t cpu_count = 2;
+static uint64_t cpu_count = 1;
 
 void kernel_main_ap(cpu_context_t* ctx) {
     // NXE
@@ -31,12 +31,15 @@ void kernel_main_ap(cpu_context_t* ctx) {
 
     cpu_enable_sse();
 
-    cpu_init_context(ctx);
     gdt_setup_for_cpu(ctx);
+    cpu_init_context(ctx);
     idt_init();
     
     vmm_enable_pat(); 
     lapic_init_ap();
+
+    lapic_timer_calibrate(); 
+    lapic_timer_init(10, 32);
 
     if (g_bi) {
     draw_test_squares_safe(ctx->cpu_id, 
