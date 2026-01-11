@@ -49,7 +49,8 @@ void kernel_main_ap(cpu_context_t* ctx) {
     if (ap_message) {
         strcpy(ap_message, "CPU ");
         ap_message[4] = (char)(ctx->cpu_id + '0'); 
-        strcpy(ap_message + 5, " ALLOCATED OK");
+        strcpy(ap_message + 5, " ALLOCATED OK ");
+        kprint(ap_message);
     }
     
     kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");

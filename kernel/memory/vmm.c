@@ -4,6 +4,15 @@
 #include <std_funcs.h>
 #include <efi_descriptor.h>
 
+// Physical address where the kernel is loaded
+#define KERNEL_PHYS_BASE 0x2000000
+// Virtual address where the kernel starts
+#define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
+// Default addr mask
+#define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
+
+#define HHDM_OFFSET 0xFFFF800000000000
+
 static page_table_t* kernel_pml4 = NULL;
 static uintptr_t kernel_pml4_phys = 0;
 
@@ -13,15 +22,6 @@ extern uint8_t _kernel_end[];
 extern uint8_t _text_start[], _text_end[];
 extern uint8_t _rodata_start[], _rodata_end[];
 extern uint8_t _data_start[], _data_end[];
-
-// Physical address where the kernel is loaded
-#define KERNEL_PHYS_BASE 0x2000000
-// Virtual address where the kernel starts
-#define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
-// Default addr mask
-#define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
-
-#define HHDM_OFFSET 0xFFFF800000000000
 
 //
 // Atomic

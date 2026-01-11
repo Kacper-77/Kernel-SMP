@@ -5,13 +5,6 @@
 #include <std_funcs.h>
 #include <serial.h>
 
-typedef struct m_header {
-    uint32_t magic;
-    size_t size;
-    int is_free;
-    struct m_header* next;
-} m_header_t;
-
 #define KMALLOC_MAGIC 0xCAFEBABE
 #define HEAP_MIN_BLOCK_SIZE 16
 

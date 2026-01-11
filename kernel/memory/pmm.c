@@ -4,6 +4,8 @@
 #include <spinlock.h>
 #include <efi_descriptor.h>
 
+#define HHDM_OFFSET 0xFFFF800000000000
+
 uint8_t* bitmap = NULL;
 uint64_t bitmap_size = 0;
 
@@ -11,8 +13,6 @@ uint64_t bitmap_size = 0;
 // Atomic
 //
 static spinlock_t pmm_lock_ = {0};
-
-#define HHDM_OFFSET 0xFFFF800000000000
 
 //
 // Helpers
