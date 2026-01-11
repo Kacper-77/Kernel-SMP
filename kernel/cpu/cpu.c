@@ -18,9 +18,8 @@ void cpu_init_bsp() {
     ctx->pmm_last_index = 0;
 
     // 3. Stack
-    uint64_t current_rsp;
-    __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
-    ctx->kernel_stack = current_rsp;
+    void* stack = pmm_alloc_frames(4); // 16KB
+    ctx->kernel_stack = (uintptr_t)phys_to_virt((uintptr_t)stack + (4 * 4096));
 
     // 4. GDT and SSE
     gdt_setup_for_cpu(ctx);
