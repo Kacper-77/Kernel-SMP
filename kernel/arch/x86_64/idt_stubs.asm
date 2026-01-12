@@ -53,7 +53,7 @@ common_stub:
     mov rbp, rsp
     and rsp, -16
     
-    call interrupt_dispatch ; New C dispatcher
+    call interrupt_dispatch
 
     mov rsp, rbp      ; Restore original stack pointer
 

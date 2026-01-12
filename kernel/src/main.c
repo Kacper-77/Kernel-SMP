@@ -10,6 +10,7 @@
 #include <std_funcs.h>
 #include <cpu.h>
 #include <test.h>
+#include <timer.h>
 #include <kmalloc.h>
 #include <spinlock.h>
 
@@ -115,12 +116,18 @@ void kernel_main_high(BootInfo *bi) {
 
     __asm__ volatile("sti");
 
-    kprint("Testing timer (waiting 5 seconds)...\n");
-    uint64_t start = get_uptime_ms();
-    while(get_uptime_ms() < start + 5000) {
-        __asm__ volatile("pause");
+    kprint("Testing timer with msleep (5 seconds)...\n");
+    
+    for (int i = 1; i <= 5; i++) {
+        msleep(1000);
+        kprint("Tick ");
+        kprint_hex(i);
+        kprint("s...\n");
     }
-    kprint("Timer TEST PASSED!\n");
+
+    kprint("Timer TEST PASSED! Uptime: ");
+    kprint_hex(get_uptime_ms());
+    kprint(" ms\n");
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
     for (;;) { __asm__ __volatile__("hlt"); }
