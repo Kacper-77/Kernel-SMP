@@ -34,6 +34,40 @@
 #define LAPIC_TDCR          0x03E0   // Timer Divide Configuration Register 
 #define LAPIC_SVR_ENABLE    0x100    // Unit Enable Bit
 
+//
+// ICR
+//
+
+// Delivery Mode
+#define ICR_FIXED              0x000
+#define ICR_LOWEST_PRIORITY    0x100
+#define ICR_SMI                0x200
+#define ICR_NMI                0x400
+#define ICR_INIT               0x500
+#define ICR_STARTUP            0x600
+
+// Destination Mode & Status
+#define ICR_PHYSICAL           0x0000
+#define ICR_LOGICAL            0x0800
+#define ICR_IDLE               0x0000
+#define ICR_SEND_PENDING       0x1000
+
+// Level & Trigger
+#define ICR_DEASSERT           0x0000
+#define ICR_ASSERT             0x4000
+#define ICR_EDGE               0x0000
+#define ICR_LEVEL              0x8000
+
+// Destination Shorthand
+#define ICR_SHORTHAND_NONE     0x00000
+#define ICR_SHORTHAND_SELF     0x40000
+#define ICR_SHORTHAND_ALL      0x80000
+#define ICR_SHORTHAND_OTHERS   0xC0000
+
+// Channels
+#define IPI_VECTOR_TEST        0xFD
+#define IPI_VECTOR_HALT        0xFE  
+
 // Driver Functions
 void lapic_init(uintptr_t virt_addr);
 void lapic_init_ap();
@@ -42,5 +76,9 @@ uint32_t lapic_read(uint32_t reg);
 void lapic_send_eoi();
 void lapic_timer_init(uint32_t ms_interval, uint8_t vector);
 void lapic_timer_calibrate();
+
+void lapic_wait_for_delivery();
+void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector);
+void lapic_broadcast_ipi(uint8_t vector);
 
 #endif

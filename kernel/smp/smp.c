@@ -123,14 +123,27 @@ void smp_init(BootInfo* bi) {
 }
 
 void boot_ap(uint32_t apic_id, uint8_t vector) {
+    // 1. INIT IPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
-    lapic_write(LAPIC_ICR_LOW, 0x0000C500); // INIT
+    lapic_write(LAPIC_ICR_LOW, ICR_INIT | ICR_ASSERT | ICR_LEVEL);
 
+    lapic_wait_for_delivery();
+    
+    // Czekamy ok. 10ms (używając Twojej pętli pause)
     for(volatile int i = 0; i < 10000000; i++) __asm__("pause");
 
+    // 2. First SIPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
-    lapic_write(LAPIC_ICR_LOW, 0x00000600 | vector); // SIPI
+    lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
+    lapic_wait_for_delivery();
+    for(volatile int i = 0; i < 1000000; i++) __asm__("pause");
+
+    // 3. Second SIPI (optional)
+    lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
+    lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
+
+    lapic_wait_for_delivery();
     for(volatile int i = 0; i < 1000000; i++) __asm__("pause");
 }
 

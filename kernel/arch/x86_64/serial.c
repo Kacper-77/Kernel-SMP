@@ -1,7 +1,10 @@
 #include <serial.h>
+#include <spinlock.h>
 #include <io.h>
 
 #define COM1 0x3f8
+
+static spinlock_t kprint_lock_ = {0};
 
 void init_serial() {
     outb(COM1 + 1, 0x00);    // Disable interrupts
@@ -22,18 +25,27 @@ void write_serial(char a) {
 }
 
 void kprint(const char* s) {
+    spin_lock(&kprint_lock_);
+
     while (*s) {
         if (*s == '\n') write_serial('\r');
         write_serial(*s++);
     }
+
+    spin_unlock(&kprint_lock_);
 }
 
 void kprint_hex(uint64_t value) {
+    spin_lock(&kprint_lock_);
+
     static const char* hex_chars = "0123456789ABCDEF";
-    kprint("0x");
+    write_serial('0');
+    write_serial('x');
 
     for (int i = 15; i >= 0; i--) {
         uint8_t nibble = (value >> (i * 4)) & 0xF;
         write_serial(hex_chars[nibble]);
     }
+
+    spin_unlock(&kprint_lock_);
 }

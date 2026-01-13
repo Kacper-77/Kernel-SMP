@@ -13,6 +13,7 @@
 #include <timer.h>
 #include <kmalloc.h>
 #include <spinlock.h>
+#include <panic.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -106,6 +107,16 @@ void kernel_main_high(BootInfo *bi) {
 
             kprint("Starting SMP initialization...\n");
             smp_init(bi);
+
+            if (get_cpu_count_test() > 1) {
+                kprint("BSP: IPI_TEST CPU 1...\n");
+                lapic_send_ipi(1, IPI_VECTOR_TEST); 
+            }
+
+            kprint("BSP: Broadcasting IPI...\n");
+            lapic_broadcast_ipi(IPI_VECTOR_TEST);
+
+            panic("End of boot test - halting system.");
 
             kmalloc_dump();
         }

@@ -99,3 +99,26 @@ void lapic_timer_init(uint32_t ms_interval, uint8_t vector) {
     // 3. Set Initial Count to the calculated ticks for the requested interval
     lapic_write(LAPIC_TICR, cpu->lapic_ticks_per_ms * ms_interval);
 }
+
+void lapic_wait_for_delivery() {
+    while (lapic_read(LAPIC_ICR_LOW) & ICR_SEND_PENDING) {
+        __asm__ volatile("pause");
+    }
+}
+
+// Allows to send interrupt to core (by it's ID)
+void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector) {
+    lapic_wait_for_delivery();
+    
+    // Dest core: ICR High (bits 24-31)
+    lapic_write(LAPIC_ICR_HIGH, (uint32_t)target_lapic_id << 24);
+    
+    // Send command through ICR Low
+    lapic_write(LAPIC_ICR_LOW, ICR_ASSERT | ICR_EDGE | ICR_FIXED | vector);
+}
+
+// Send interrupt to all cores, except one who called it.
+void lapic_broadcast_ipi(uint8_t vector) {
+    lapic_wait_for_delivery();
+    lapic_write(LAPIC_ICR_LOW, ICR_SHORTHAND_OTHERS | ICR_ASSERT | ICR_EDGE | ICR_FIXED | vector);
+}

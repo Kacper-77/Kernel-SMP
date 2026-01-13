@@ -3,6 +3,7 @@
 #include <cpu.h>
 #include <serial.h>
 #include <timer.h>
+#include <panic.h>
 
 static struct idt_ptr idtr;
 static struct idt_entry idt[256];
@@ -26,7 +27,7 @@ void exception_handler(interrupt_frame_t* frame) {
     kprint("\nStack at: ");    kprint_hex(frame->rsp);
     kprint("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     
-    for(;;);
+    panic("Unhandled CPU Exception");
 }
 
 void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
@@ -48,6 +49,16 @@ void interrupt_dispatch(interrupt_frame_t* frame) {
             system_uptime_ms += 10;
         }
         lapic_send_eoi();
+    } else if (frame->vector_number == IPI_VECTOR_TEST) {
+        // TEST
+        kprint("IPI Received on CPU ");
+        kprint_hex(get_cpu()->cpu_id);
+        kprint("\n");
+        
+        lapic_send_eoi(); // Bardzo ważne!
+    } else if (frame->vector_number == IPI_VECTOR_HALT) {
+        __asm__ volatile("cli");
+        for(;;) __asm__ volatile("hlt");
     } else {
         lapic_send_eoi();
     }
