@@ -4,7 +4,7 @@
 
 #define COM1 0x3f8
 
-static spinlock_t kprint_lock_ = {0};
+spinlock_t kprint_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 
 void init_serial() {
     outb(COM1 + 1, 0x00);    // Disable interrupts

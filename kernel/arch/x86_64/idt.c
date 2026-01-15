@@ -4,6 +4,7 @@
 #include <serial.h>
 #include <timer.h>
 #include <panic.h>
+#include <spinlock.h>
 
 static struct idt_ptr idtr;
 static struct idt_entry idt[256];
@@ -50,12 +51,16 @@ void interrupt_dispatch(interrupt_frame_t* frame) {
         }
         lapic_send_eoi();
     } else if (frame->vector_number == IPI_VECTOR_TEST) {
-        // TEST
+        extern spinlock_t kprint_lock_;
+        spin_lock(&kprint_lock_);
+
         kprint("IPI Received on CPU ");
         kprint_hex(get_cpu()->cpu_id);
         kprint("\n");
         
-        lapic_send_eoi(); // Bardzo ważne!
+        spin_unlock(&kprint_lock_);
+
+        lapic_send_eoi();
     } else if (frame->vector_number == IPI_VECTOR_HALT) {
         __asm__ volatile("cli");
         for(;;) __asm__ volatile("hlt");

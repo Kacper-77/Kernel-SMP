@@ -2,12 +2,18 @@
 #include <serial.h>
 #include <apic.h>
 #include <cpu.h>
+#include <spinlock.h>
 
 void smp_halt_others(void) {
     lapic_broadcast_ipi(IPI_VECTOR_HALT);
 }
 
 void panic(const char* message) {
+    extern spinlock_t kprint_lock_;
+
+    kprint_lock_.lock = 0;
+    kprint_lock_.owner = -1;
+    
     __asm__ volatile("cli");
     smp_halt_others();
 

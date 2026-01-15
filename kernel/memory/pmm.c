@@ -12,7 +12,7 @@ uint64_t bitmap_size = 0;
 //
 // Atomic
 //
-static spinlock_t pmm_lock_ = {0};
+static spinlock_t pmm_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 
 //
 // Helpers

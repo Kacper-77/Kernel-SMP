@@ -81,4 +81,12 @@ void lapic_wait_for_delivery();
 void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector);
 void lapic_broadcast_ipi(uint8_t vector);
 
+//
+// Helper: extract ID of current CPU.
+//
+static inline int get_current_cpu_id() {
+    extern volatile uint32_t* lapic_base; 
+    return (int)(lapic_base[0x20 / 4] >> 24);
+}
+
 #endif

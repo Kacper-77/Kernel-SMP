@@ -8,7 +8,7 @@
 #define KMALLOC_MAGIC 0xCAFEBABE
 #define HEAP_MIN_BLOCK_SIZE 16
 
-static spinlock_t heap_lock_ = {0};
+static spinlock_t heap_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 static m_header_t* heap_start = NULL;
 
 //
@@ -30,8 +30,12 @@ static void kpanic(const char* message) {
 // DIAGNOSTIC
 //
 void kmalloc_dump() {
-    spin_lock(&heap_lock_);
-    kprint("\n--- HEAP DUMP ---\n");
+    extern spinlock_t kprint_lock_;
+
+    spin_lock(&kprint_lock_);
+    spin_lock(&heap_lock_); 
+
+    kprint("\n--- DUMP START ---\n");
     m_header_t* curr = heap_start;
     while (curr) {
         kprint("Block: "); kprint_hex((uintptr_t)curr);
@@ -40,8 +44,10 @@ void kmalloc_dump() {
         kprint("\n");
         curr = curr->next;
     }
-    kprint("-----------------\n");
+    kprint("--- DUMP END ---\n");
+
     spin_unlock(&heap_lock_);
+    spin_unlock(&kprint_lock_);
 }
 
 //

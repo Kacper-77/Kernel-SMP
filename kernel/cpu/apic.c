@@ -5,7 +5,7 @@
 #include <serial.h>
 
 // Pointer to the memory-mapped APIC registers
-static volatile uint32_t* lapic_base = NULL;
+volatile uint32_t* lapic_base = NULL;
 
 // Write a 32-bit value to a Local APIC register.
 void lapic_write(uint32_t reg, uint32_t data) {

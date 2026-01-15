@@ -26,7 +26,7 @@ extern uint8_t _data_start[], _data_end[];
 //
 // Atomic
 //
-static spinlock_t vmm_lock_ = {0};
+static spinlock_t vmm_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 
 //
 // Helper
@@ -192,13 +192,15 @@ uintptr_t phys_to_virt(uintptr_t phys) {
 void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
     uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
     
+    spin_lock(&vmm_lock_);
     for (uint64_t i = 0; i < num_pages; i++) {
         uintptr_t v_addr = virt + (i * PAGE_SIZE);
         uintptr_t p_addr = phys + (i * PAGE_SIZE);
         
-        vmm_map(pml4, v_addr, p_addr, flags);
+        vmm_map(pml4, v_addr, p_addr, flags); 
         vmm_invlpg((void*)v_addr);
     }
+    spin_unlock(&vmm_lock_);
 }
 
 //
