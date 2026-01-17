@@ -29,7 +29,7 @@ isr_stub_%1:
 %endrep
 
 common_stub:
-    ; SAVE ALL REGISTERS (Match your interrupt_frame_t structure)
+    ; SAVE ALL REGISTERS
     push rax
     push rcx
     push rdx
@@ -46,16 +46,14 @@ common_stub:
     push r14
     push r15
 
-    ; The stack pointer now points to the complete frame
     mov rdi, rsp      
     
-    ; Align stack to 16 bytes for System V ABI (C calling convention)
-    mov rbp, rsp
-    and rsp, -16
+    ; System V ABI alignment
+    sub rsp, 8
     
     call interrupt_dispatch
 
-    mov rsp, rbp      ; Restore original stack pointer
+    mov rsp, rax        
 
     ; RESTORE ALL REGISTERS
     pop r15
@@ -74,7 +72,7 @@ common_stub:
     pop rcx
     pop rax
 
-    add rsp, 16       ; Clean up vector and error code
+    add rsp, 16       ; Delete vector number and error code
     iretq
 
 section .data

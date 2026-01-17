@@ -12,9 +12,32 @@ typedef struct {
     volatile int recursion;
 } __attribute__((aligned(64))) spinlock_t;
 
+static inline uint64_t save_interrupts_and_cli() {
+    uint64_t rflags;
+    __asm__ volatile(
+        "pushfq\n\t"
+        "pop %0\n\t"
+        "cli"
+        : "=rm"(rflags)
+        :
+        : "memory"
+    );
+    return rflags;
+}
+
+static inline void restore_interrupts(uint64_t rflags) {
+    __asm__ volatile(
+        "push %0\n\t"
+        "popfq"
+        :
+        : "rm"(rflags)
+        : "memory"
+    );
+}
+
 static inline void spin_lock(spinlock_t* target) {
     if (!g_lock_enabled) return;
-
+    
     int cpu_id = get_current_cpu_id();
 
     if (target->owner == cpu_id) {

@@ -16,6 +16,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/cpu)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/smp)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/utils)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/sched)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/arch/x86_64)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/arch/x86_64/drivers)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/memory)
@@ -25,7 +26,9 @@ file(GLOB KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/smp/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/smp/*.asm"
     "${CMAKE_CURRENT_SOURCE_DIR}/memory/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/sched/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/sched/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/drivers/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/*.asm")
 

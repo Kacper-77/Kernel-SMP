@@ -9,6 +9,7 @@
 #include <kmalloc.h>
 #include <std_funcs.h>
 #include <serial.h>
+#include <sched.h>
 
 #include <test.h>
 
@@ -40,6 +41,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
 
     lapic_timer_calibrate(); 
     lapic_timer_init(10, 32);
+    sched_init_ap();
 
     if (g_bi) {
     draw_test_squares_safe(ctx->cpu_id, 

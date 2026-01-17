@@ -25,6 +25,7 @@ void write_serial(char a) {
 }
 
 void kprint(const char* s) {
+    uint64_t f = save_interrupts_and_cli();
     spin_lock(&kprint_lock_);
 
     while (*s) {
@@ -33,6 +34,7 @@ void kprint(const char* s) {
     }
 
     spin_unlock(&kprint_lock_);
+    restore_interrupts(f);
 }
 
 void kprint_hex(uint64_t value) {

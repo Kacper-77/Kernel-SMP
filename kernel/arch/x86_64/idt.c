@@ -4,6 +4,7 @@
 #include <serial.h>
 #include <timer.h>
 #include <panic.h>
+#include <sched.h>
 #include <spinlock.h>
 
 static struct idt_ptr idtr;
@@ -42,13 +43,15 @@ void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
     idt[vector].reserved   = 0;
 }
 
-void interrupt_dispatch(interrupt_frame_t* frame) {
+uint64_t interrupt_dispatch(interrupt_frame_t* frame) {
+    uint64_t next_rsp = (uint64_t)frame;
+
     if (frame->vector_number < 32) {
         exception_handler(frame);
     } else if (frame->vector_number == 32) {
-        if (get_cpu()->cpu_id == 0) {
-            system_uptime_ms += 10;
-        }
+        if (get_cpu()->cpu_id == 0) system_uptime_ms += 10;
+
+        next_rsp = schedule(frame);
         lapic_send_eoi();
     } else if (frame->vector_number == IPI_VECTOR_TEST) {
         extern spinlock_t kprint_lock_;
@@ -67,6 +70,8 @@ void interrupt_dispatch(interrupt_frame_t* frame) {
     } else {
         lapic_send_eoi();
     }
+
+    return next_rsp;
 }
 
 void idt_init() {

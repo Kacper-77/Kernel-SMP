@@ -14,6 +14,7 @@
 #include <kmalloc.h>
 #include <spinlock.h>
 #include <panic.h>
+#include <sched.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -23,6 +24,32 @@ int g_lock_enabled = 0;
 
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
+
+static void task_a() {
+    int x = 0;
+    while(x < 10) {
+        kprint("A");
+        msleep(100);
+        x++;
+    }
+    kprint("\nTask A finished and yielding...\n");
+    while(1) {
+        sched_yield();
+    }
+}
+
+static void task_b() {
+    int x = 0;
+    while(x < 15) {
+        kprint("B");
+        msleep(100);
+        x++;
+    }
+    kprint("\nTask B finished and yielding...\n");
+    while(1) {
+        sched_yield();
+    }
+}
 
 // Low-half entry point (Bootstrap)
 __attribute__((sysv_abi, section(".text.entry")))
@@ -105,6 +132,8 @@ void kernel_main_high(BootInfo *bi) {
             lapic_timer_calibrate();
             lapic_timer_init(10, 32);
 
+            sched_init();
+
             kprint("Starting SMP initialization...\n");
             smp_init(bi);
 
@@ -135,6 +164,9 @@ void kernel_main_high(BootInfo *bi) {
         kprint_hex(i);
         kprint("s...\n");
     }
+    arch_task_create(task_a);
+    arch_task_create(task_b);
+    kprint("Scheduler started!\n");
 
     kprint("Timer TEST PASSED! Uptime: ");
     kprint_hex(get_uptime_ms());

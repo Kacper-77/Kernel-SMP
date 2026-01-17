@@ -56,8 +56,9 @@ typedef struct cpu_context {
         uint64_t base;
     } __attribute__((packed)) gdt_ptr;
     
-    // Current thread NOTE: Scheduler later!
-    void* current_thread;
+    // Scheduler
+    struct task* current_task;
+    struct task* idle_task;
     
     // Kernel Stack
     uint64_t kernel_stack;
