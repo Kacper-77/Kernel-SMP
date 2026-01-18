@@ -114,18 +114,16 @@ void* kmalloc(size_t size) {
 
     // 2. EXPANDING HEAP
     // Get new frame
-    void* new_frame = pmm_alloc_frame();
-    if (!new_frame) {
-        spin_unlock(&heap_lock_);
-        return NULL;
-    }
+    size_t required_with_header = size + sizeof(m_header_t);
+    size_t num_frames = (required_with_header + 4095) / 4096;
+    void* new_frames = pmm_alloc_frames(num_frames);
 
-    uintptr_t virt_addr = phys_to_virt((uintptr_t)new_frame);
-    memset((void*)virt_addr, 0, 4096);
+    uintptr_t virt_addr = phys_to_virt((uintptr_t)new_frames);
+    memset((void*)virt_addr, 0, num_frames * 4096);
 
     m_header_t* new_block = (m_header_t*)virt_addr;
     new_block->magic = KMALLOC_MAGIC;
-    new_block->size = 4096 - sizeof(m_header_t);
+    new_block->size = (num_frames * 4096) - sizeof(m_header_t);
     new_block->is_free = 0;
     new_block->next = NULL;
 
@@ -171,12 +169,13 @@ void kfree(void* ptr) {
     m_header_t* current = heap_start;
     while (current != NULL && current->next != NULL) {
         if (current->is_free && current->next->is_free) {
-            // NEW SIZE: old size + next header + next data
+        uintptr_t end_of_current = (uintptr_t)current + sizeof(m_header_t) + current->size;
+        if (end_of_current == (uintptr_t)current->next) {
             current->size += current->next->size + sizeof(m_header_t);
-            
             current->next = current->next->next;
-            continue; 
+            continue;
         }
+    }
         current = current->next;
     }
 

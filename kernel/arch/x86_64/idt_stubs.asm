@@ -46,14 +46,14 @@ common_stub:
     push r14
     push r15
 
-    mov rdi, rsp      
+    mov rdi, rsp
     
-    ; System V ABI alignment
-    sub rsp, 8
+    mov rbp, rsp
+    and rsp, -16
     
     call interrupt_dispatch
 
-    mov rsp, rax        
+    mov rsp, rax       
 
     ; RESTORE ALL REGISTERS
     pop r15

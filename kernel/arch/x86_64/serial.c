@@ -38,9 +38,10 @@ void kprint(const char* s) {
 }
 
 void kprint_hex(uint64_t value) {
+    uint64_t f = save_interrupts_and_cli();
     spin_lock(&kprint_lock_);
 
-    static const char* hex_chars = "0123456789ABCDEF";
+    const char* hex_chars = "0123456789ABCDEF";
     write_serial('0');
     write_serial('x');
 
@@ -50,4 +51,5 @@ void kprint_hex(uint64_t value) {
     }
 
     spin_unlock(&kprint_lock_);
+    restore_interrupts(f);
 }

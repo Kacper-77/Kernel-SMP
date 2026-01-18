@@ -20,12 +20,14 @@ typedef struct task {
     struct task* next;
     uint64_t cpu_id;
     uint64_t sleep_until;
-} task_t;
+} __attribute__((packed)) task_t;
 
 void sched_init();
 void sched_init_ap();
 uint64_t schedule(interrupt_frame_t* frame);
 void sched_yield();
+void task_exit();
+void sched_reap();
 task_t* sched_get_current();
 
 task_t* arch_task_create(void (*entry_point)(void));

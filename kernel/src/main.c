@@ -32,10 +32,7 @@ static void task_a() {
         msleep(100);
         x++;
     }
-    kprint("\nTask A finished and yielding...\n");
-    while(1) {
-        sched_yield();
-    }
+    task_exit();
 }
 
 static void task_b() {
@@ -45,10 +42,7 @@ static void task_b() {
         msleep(100);
         x++;
     }
-    kprint("\nTask B finished and yielding...\n");
-    while(1) {
-        sched_yield();
-    }
+    task_exit();
 }
 
 // Low-half entry point (Bootstrap)
@@ -173,5 +167,9 @@ void kernel_main_high(BootInfo *bi) {
     kprint(" ms\n");
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
-    for (;;) { __asm__ __volatile__("hlt"); }
+    while(1) {
+        sched_reap();
+        __asm__ volatile("hlt");
+        sched_yield();
+    }
 }

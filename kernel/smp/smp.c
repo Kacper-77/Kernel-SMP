@@ -9,6 +9,7 @@
 #include <kmalloc.h>
 #include <std_funcs.h>
 #include <serial.h>
+#include <timer.h>
 #include <sched.h>
 
 #include <test.h>
@@ -19,6 +20,26 @@ extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
 
 static uint64_t cpu_count = 1;
+
+static void ap_test_task() {
+    int x = 0;
+    while(x < 10) {
+        kprint("?");
+        msleep(100);
+        x++;
+    }
+    task_exit();
+}
+
+static void ap_test_task2() {
+    int x = 0;
+    while(x < 10) {
+        kprint("!");
+        msleep(100);
+        x++;
+    }
+    task_exit();
+}
 
 void kernel_main_ap(cpu_context_t* ctx) {
     // NXE
@@ -62,7 +83,11 @@ void kernel_main_ap(cpu_context_t* ctx) {
     
     __asm__ volatile("sti");
 
-    while(1) {
+    arch_task_create(ap_test_task);
+    arch_task_create(ap_test_task2);
+
+    while(1) { 
+        sched_yield();
         __asm__ volatile("hlt");
     }
 }

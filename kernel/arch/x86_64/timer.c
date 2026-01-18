@@ -14,8 +14,6 @@ void msleep(uint64_t ms) {
         while ((get_uptime_ms() - start) < ms) __asm__ volatile("pause");
         return;
     }
-
     current->sleep_until = get_uptime_ms() + ms;
-    
-    __asm__ volatile("int $32"); 
+    sched_yield(); 
 }
