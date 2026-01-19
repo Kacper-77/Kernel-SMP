@@ -78,17 +78,19 @@ void kernel_main_ap(cpu_context_t* ctx) {
         strcpy(ap_message + 5, " ALLOCATED OK ");
         kprint(ap_message);
     }
+    kfree((void*)ap_message);
     
     kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");
-    
-    __asm__ volatile("sti");
 
     arch_task_create(ap_test_task);
     arch_task_create(ap_test_task2);
 
-    while(1) { 
-        sched_yield();
+    __asm__ volatile("sti");
+
+    while(1) {
+        sched_reap();
         __asm__ volatile("hlt");
+        sched_yield();
     }
 }
 

@@ -15,5 +15,6 @@ void msleep(uint64_t ms) {
         return;
     }
     current->sleep_until = get_uptime_ms() + ms;
+    current->state = TASK_SLEEPING;
     sched_yield(); 
 }

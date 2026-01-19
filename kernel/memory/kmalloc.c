@@ -91,7 +91,6 @@ void* kmalloc(size_t size) {
         if (current->is_free && current->size >= size) {
             if (current->size >= size + sizeof(m_header_t) + HEAP_MIN_BLOCK_SIZE) {
                 m_header_t* next_block = (m_header_t*)((uintptr_t)current + sizeof(m_header_t) + size);
-                
                 next_block->magic = KMALLOC_MAGIC;
                 next_block->size = current->size - size - sizeof(m_header_t);
                 next_block->is_free = 1;
