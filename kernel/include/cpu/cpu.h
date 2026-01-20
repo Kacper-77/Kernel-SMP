@@ -38,7 +38,7 @@ typedef struct gdt_tss_entry {
 
 typedef struct {
     gdt_entry_t entries[5];         // Null, KCode, KData, UCode, UData
-    gdt_tss_entry_t tss_entry;      // TSS
+    gdt_tss_entry_t tss_entry;
 } __attribute__((packed)) cpu_gdt_t;
 
 typedef struct cpu_context {
@@ -85,6 +85,9 @@ static inline void cpu_init_context(cpu_context_t* ctx) {
     
     // MSR_GS_BASE (0xC0000101)
     __asm__ volatile ("wrmsr" : : "a"(low), "d"(high), "c"(0xC0000101) : "memory");
+
+    // MSR_KERNEL_GS_BASE (0xC0000102)
+    __asm__ volatile ("wrmsr" : : "a"(low), "d"(high), "c"(0xC0000102) : "memory");
 }
 
 static inline void cpu_enable_sse() {

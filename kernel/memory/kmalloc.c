@@ -70,6 +70,7 @@ void kmalloc_init() {
     heap_start->size = 4096 - sizeof(m_header_t);
     heap_start->is_free = 1;
     heap_start->next = NULL;
+    heap_start->prev = NULL;
 
     spin_unlock(&heap_lock_);
 }
@@ -93,8 +94,12 @@ void* kmalloc(size_t size) {
                 m_header_t* next_block = (m_header_t*)((uintptr_t)current + sizeof(m_header_t) + size);
                 next_block->magic = KMALLOC_MAGIC;
                 next_block->size = current->size - size - sizeof(m_header_t);
+
                 next_block->is_free = 1;
                 next_block->next = current->next;
+                next_block->prev = current;
+                if (next_block->next)
+                    next_block->next->prev = next_block;
 
                 current->size = size;
                 current->next = next_block;
@@ -125,6 +130,7 @@ void* kmalloc(size_t size) {
     new_block->size = (num_frames * 4096) - sizeof(m_header_t);
     new_block->is_free = 0;
     new_block->next = NULL;
+    new_block->prev = last;
 
     // Match size
     if (new_block->size >= size + sizeof(m_header_t) + HEAP_MIN_BLOCK_SIZE) {
@@ -136,12 +142,14 @@ void* kmalloc(size_t size) {
 
         new_block->size = size;
         new_block->next = split_block;
+        split_block->prev = new_block;
     }
 
     if (last) { 
         last->next = new_block; 
     } else {
         heap_start = new_block;
+        heap_start->prev = NULL;
     }
 
     spin_unlock(&heap_lock_);
@@ -151,31 +159,44 @@ void* kmalloc(size_t size) {
 void kfree(void* ptr) {
     if (!ptr) return;
 
-    // Get header
+    // 1. Get header
     m_header_t* header = (m_header_t*)((uintptr_t)ptr - sizeof(m_header_t));
 
-    // Verify magic number
-    if (header->magic != KMALLOC_MAGIC) {
+    // 2. Verify magic number 
+    if (header->magic != KMALLOC_MAGIC)
         kpanic("KMALLOC: Heap corruption detected (Invalid Magic Number)!");
-    }
+
+    if (header->is_free)  // Additional protection
+        kpanic("KMALLOC: Double free detected!");
 
     spin_lock(&heap_lock_);
     
-    // Set block as free
+    // 3. Set block as free
     header->is_free = 1;
 
-    // COALESCING
-    m_header_t* current = heap_start;
-    while (current != NULL && current->next != NULL) {
-        if (current->is_free && current->next->is_free) {
-        uintptr_t end_of_current = (uintptr_t)current + sizeof(m_header_t) + current->size;
-        if (end_of_current == (uintptr_t)current->next) {
-            current->size += current->next->size + sizeof(m_header_t);
-            current->next = current->next->next;
-            continue;
+    // 4. COALESCING
+    // Merge with next block
+    if (header->next && header->next->is_free) {
+        uintptr_t end = (uintptr_t)header + sizeof(m_header_t) + header->size;
+        if (end == (uintptr_t)header->next) {
+            header->size += header->next->size + sizeof(m_header_t);
+            header->next = header->next->next;
+            if (header->next)
+                header->next->prev = header;
         }
     }
-        current = current->next;
+
+    // Merge with previous block
+    if (header->prev && header->prev->is_free) {
+        uintptr_t end = (uintptr_t)header->prev + sizeof(m_header_t) + header->prev->size;
+        if (end == (uintptr_t)header) {
+            header->prev->size += header->size + sizeof(m_header_t);
+            header->prev->next = header->next;
+            if (header->next)
+                header->next->prev = header->prev;
+            
+            header = header->prev;
+        }
     }
 
     spin_unlock(&heap_lock_);

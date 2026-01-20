@@ -9,6 +9,7 @@ typedef struct m_header {
     size_t size;
     int is_free;
     struct m_header* next;
+    struct m_header* prev;
 } m_header_t;
 
 void kmalloc_init();
