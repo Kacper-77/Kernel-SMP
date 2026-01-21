@@ -82,8 +82,8 @@ void kernel_main_ap(cpu_context_t* ctx) {
     
     kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");
 
-    arch_task_create(ap_test_task);
-    arch_task_create(ap_test_task2);
+    // arch_task_create(ap_test_task);
+    // arch_task_create(ap_test_task2);
 
     __asm__ volatile("sti");
 

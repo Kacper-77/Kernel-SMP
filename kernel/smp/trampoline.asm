@@ -3,6 +3,7 @@
 section .rodata
 global trampoline_start
 global trampoline_end
+global jump_to_user
 
 trampoline_start:
 [bits 16]
@@ -70,11 +71,30 @@ gdt:
     dq 0x00CF92000000FFFF ; 0x10: Data 32
     dq 0x00AF9A000000FFFF ; 0x18: Code 64
     dq 0x00AF92000000FFFF ; 0x20: Data 64
+    dq 0x00AFFB000000FFFF ; 0x28: Code 64 (User)  <- DPL=3, Readable, Executable
+    dq 0x00AFF3000000FFFF ; 0x30: Data 64 (User)
 gdt_ptr:
     dw $ - gdt - 1
     dd gdt - trampoline_start + 0x8000
 gdt64_ptr:
     dw $ - gdt - 1
     dq gdt - trampoline_start + 0x8000
+
+jump_to_user:
+    ; RDI (RIP)
+    ; RSI (RSP)
+
+mov ax, 0x33      ; User Data (0x30 | 3)
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax        
+    
+    push 0x33         ; SS
+    push rsi          ; RSP
+    push 0x202        ; RFLAGS
+    push 0x2B         ; CS (0x28 | 3)
+    push rdi          ; RIP
+    iretq
 
 trampoline_end:

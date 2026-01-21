@@ -29,7 +29,7 @@ isr_stub_%1:
 %endrep
 
 common_stub:
-    ; SAVE ALL REGISTERS
+    ; 1. Save regs
     push rax
     push rcx
     push rdx
@@ -46,16 +46,26 @@ common_stub:
     push r14
     push r15
 
-    mov rdi, rsp
-    
-    mov rbp, rsp
-    and rsp, -16
+    ; 2. GS swap if we go from User Mode
+    test qword [rsp + 144], 3
+    jz .no_swap_in
+    swapgs
+.no_swap_in:
+
+    mov rdi, rsp                        
+    sub rsp, 8             ; Align stack for ABI
     
     call interrupt_dispatch
+    
+    mov rsp, rax               
 
-    mov rsp, rax       
+    ; 3. GS swap if we going back to User Mode
+    test qword [rsp + 144], 3
+    jz .no_swap_out
+    swapgs
+.no_swap_out:
 
-    ; RESTORE ALL REGISTERS
+    ; 4. Restore state
     pop r15
     pop r14
     pop r13
@@ -72,7 +82,7 @@ common_stub:
     pop rcx
     pop rax
 
-    add rsp, 16       ; Delete vector number and error code
+    add rsp, 16                ; Delete vector and error_code
     iretq
 
 section .data

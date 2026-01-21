@@ -51,4 +51,13 @@ void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size);
 page_table_t* vmm_get_pml4();
 uintptr_t vmm_get_pml4_phys();
 
+//
+// Invalidates a single page in the TLB (Translation Lookaside Buffer).
+// Must be called after changing an existing mapping to ensure the CPU
+// doesn't use stale data from its internal cache.
+//
+static inline void vmm_invlpg(void* addr) {
+    __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
 #endif

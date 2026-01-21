@@ -15,6 +15,7 @@
 #include <spinlock.h>
 #include <panic.h>
 #include <sched.h>
+#include <process.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -24,6 +25,18 @@ int g_lock_enabled = 0;
 
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
+
+static void user_test_task() {
+    // Ring 3 - test
+    volatile uint64_t counter = 0;
+    while(1) {
+        counter++;
+        if (counter % 10000000 == 0) {
+            // No Syscalls yet
+            __asm__ volatile("nop");
+        }
+    }
+}
 
 static void task_a() {
     int x = 0;
@@ -142,6 +155,10 @@ void kernel_main_high(BootInfo *bi) {
             // panic("End of boot test - halting system.");
 
             kmalloc_dump();
+
+            kprint("Testing Ring 3 jump...\n");
+
+            // start_user_process(user_test_task);
         }
     }
 

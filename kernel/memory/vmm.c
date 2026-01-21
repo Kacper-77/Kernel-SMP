@@ -39,15 +39,6 @@ static inline page_table_t* vmm_get_table(uintptr_t phys) {
 }
 
 //
-// Invalidates a single page in the TLB (Translation Lookaside Buffer).
-// Must be called after changing an existing mapping to ensure the CPU
-// doesn't use stale data from its internal cache.
-//
-static inline void vmm_invlpg(void* addr) {
-    __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
-}
-
-//
 // Configures the Page Attribute Table (PAT) MSR to define 
 // memory caching types. We set PAT4 to Write-Combining (WC) 
 // for high-performance framebuffer access.
@@ -84,7 +75,7 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     }
     page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
@@ -92,7 +83,7 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     }
     page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
@@ -100,7 +91,7 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     if (!(pd->entries[pd_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+        pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     }
     page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
 
@@ -120,14 +111,14 @@ void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t f
     if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     }
     page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
     if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE;
+        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     }
     page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
