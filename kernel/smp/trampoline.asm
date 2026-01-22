@@ -80,21 +80,4 @@ gdt64_ptr:
     dw $ - gdt - 1
     dq gdt - trampoline_start + 0x8000
 
-jump_to_user:
-    ; RDI (RIP)
-    ; RSI (RSP)
-
-mov ax, 0x33      ; User Data (0x30 | 3)
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax        
-    
-    push 0x33         ; SS
-    push rsi          ; RSP
-    push 0x202        ; RFLAGS
-    push 0x2B         ; CS (0x28 | 3)
-    push rdi          ; RIP
-    iretq
-
 trampoline_end:

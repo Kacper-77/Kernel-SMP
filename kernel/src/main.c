@@ -158,7 +158,7 @@ void kernel_main_high(BootInfo *bi) {
 
             kprint("Testing Ring 3 jump...\n");
 
-            // start_user_process(user_test_task);
+            arch_task_create_user(user_test_task);
         }
     }
 

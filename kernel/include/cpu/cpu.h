@@ -106,4 +106,14 @@ static inline void cpu_enable_sse() {
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
 }
 
+static inline uint64_t read_cr3(void) {
+    uint64_t val;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(val));
+    return val;
+}
+
+static inline void write_cr3(uint64_t val) {
+    __asm__ volatile("mov %0, %%cr3" : : "r"(val) : "memory");
+}
+
 #endif

@@ -40,6 +40,7 @@ typedef struct {
 
 void vmm_init(BootInfo* bi);
 void vmm_enable_pat();
+uintptr_t vmm_create_user_pml4();
 uintptr_t phys_to_virt(uintptr_t phys);
 uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt);
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
@@ -58,6 +59,14 @@ uintptr_t vmm_get_pml4_phys();
 //
 static inline void vmm_invlpg(void* addr) {
     __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
+static inline page_table_t* vmm_get_table(uintptr_t phys) {
+    extern page_table_t* kernel_pml4;
+    if (kernel_pml4 == NULL) {
+        return (page_table_t*)phys;
+    }
+    return (page_table_t*)phys_to_virt(phys);
 }
 
 #endif

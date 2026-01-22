@@ -41,6 +41,18 @@ static void ap_test_task2() {
     task_exit();
 }
 
+static void user_test_task_ap() {
+    // Ring 3 - test
+    volatile uint64_t counter = 0;
+    while(1) {
+        counter++;
+        if (counter % 10000000 == 0) {
+            // No Syscalls yet
+            __asm__ volatile("nop");
+        }
+    }
+}
+
 void kernel_main_ap(cpu_context_t* ctx) {
     // NXE
     __asm__ volatile(
@@ -82,8 +94,9 @@ void kernel_main_ap(cpu_context_t* ctx) {
     
     kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");
 
-    // arch_task_create(ap_test_task);
-    // arch_task_create(ap_test_task2);
+    arch_task_create(ap_test_task);
+    arch_task_create(ap_test_task2);
+    arch_task_create(user_test_task_ap);
 
     __asm__ volatile("sti");
 

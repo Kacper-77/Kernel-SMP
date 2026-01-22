@@ -13,7 +13,7 @@
 
 #define HHDM_OFFSET 0xFFFF800000000000
 
-static page_table_t* kernel_pml4 = NULL;
+page_table_t* kernel_pml4 = NULL;
 static uintptr_t kernel_pml4_phys = 0;
 
 // Symbols from the new linker script
@@ -23,20 +23,8 @@ extern uint8_t _text_start[], _text_end[];
 extern uint8_t _rodata_start[], _rodata_end[];
 extern uint8_t _data_start[], _data_end[];
 
-//
 // Atomic
-//
 static spinlock_t vmm_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
-
-//
-// Helper
-//
-static inline page_table_t* vmm_get_table(uintptr_t phys) {
-    if (kernel_pml4 == NULL) {
-        return (page_table_t*)phys;
-    }
-    return (page_table_t*)phys_to_virt(phys);
-}
 
 //
 // Configures the Page Attribute Table (PAT) MSR to define 
@@ -57,6 +45,23 @@ void vmm_enable_pat() {
     high = (uint32_t)(pat >> 32);
 
     __asm__ volatile("wrmsr" : : "a"(low), "d"(high), "c"(0x277));
+}
+
+uintptr_t vmm_create_user_pml4() {
+    uintptr_t pml4_phys = (uintptr_t)pmm_alloc_frame();
+    if (!pml4_phys) return 0;
+
+    page_table_t* new_pml4 = vmm_get_table(pml4_phys);
+    memset(new_pml4, 0, PAGE_SIZE);
+
+    // Copy Kernel space (top 256 entries) from the boot PML4
+    // Replace 'kernel_pml4' with global kernel page table pointer
+    extern page_table_t* kernel_pml4; 
+    for (int i = 256; i < 512; i++) {
+        new_pml4->entries[i] = kernel_pml4->entries[i];
+    }
+
+    return pml4_phys;
 }
 
 //
@@ -234,7 +239,7 @@ void vmm_init(BootInfo* bi) {
     uintptr_t text_phys = KERNEL_PHYS_BASE + ((uintptr_t)_text_start - KERNEL_VIRT_BASE);
     size_t text_size = (size_t)(_text_end - _text_start);
     vmm_map_range(local_pml4, (uintptr_t)_text_start, text_phys, text_size, 
-                PTE_PRESENT);
+                PTE_PRESENT | PTE_USER);  // USER FOR TEST!!!
 
     // 3.1 Read-Only Data (.rodata)
     uintptr_t rodata_phys = KERNEL_PHYS_BASE + ((uintptr_t)_rodata_start - KERNEL_VIRT_BASE);

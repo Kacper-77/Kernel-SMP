@@ -46,7 +46,10 @@ static task_t* create_idle_struct(void (*entry)(void)) {
     frame->rflags = 0x202; 
     frame->rsp = stack_top - 8; 
     frame->ss = 0x10;
-    
+
+    t->cr3 = read_cr3(); 
+    t->is_user = false;
+    t->stack_size = stack_size;
     t->rsp = (uintptr_t)frame;
     t->tid = 1;  // TID 1 reserved for Idle tasks
     t->state = TASK_RUNNING;
@@ -67,6 +70,9 @@ void sched_init() {
     main_task->state = TASK_RUNNING;
     main_task->next = main_task;
     main_task->cpu_id = cpu->cpu_id;
+    main_task->is_user = false;
+    main_task->cr3 = read_cr3();
+    main_task->stack_size = 0;
     
     root_task = main_task;
     cpu->current_task = main_task;
@@ -125,6 +131,15 @@ uint64_t schedule(interrupt_frame_t* frame) {
     scheduled_next->state = TASK_RUNNING;
     scheduled_next->cpu_id = cpu->cpu_id;
     cpu->current_task = scheduled_next;
+
+    if (scheduled_next->cr3 != 0 && scheduled_next->cr3 != read_cr3()) {
+        write_cr3(scheduled_next->cr3);
+    }
+
+    // If Ring 3 set return address 
+    if (scheduled_next->is_user) {
+        cpu->tss.rsp0 = scheduled_next->stack_base + scheduled_next->stack_size; 
+    }
 
     spin_unlock(&sched_lock_);
     return scheduled_next->rsp;  // Return stack pointer for context switch
@@ -197,7 +212,6 @@ void sched_reap() {
         prev = current;
         current = current->next;
     }
-
     spin_unlock(&sched_lock_);
 }
 
