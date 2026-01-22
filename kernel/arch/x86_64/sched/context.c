@@ -36,8 +36,8 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     memset(frame, 0, sizeof(interrupt_frame_t));
 
     frame->rip = (uintptr_t)entry_point;
-    frame->cs = 0x08;
-    frame->ss = 0x10;
+    frame->cs  = 0x08;
+    frame->ss  = 0x10;
     frame->rflags = 0x202; // IF=1
 
     // Initial RSP/RBP pointing to the top of the stack

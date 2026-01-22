@@ -38,6 +38,16 @@ static void user_test_task() {
     }
 }
 
+static void user_test_task_2() {
+    volatile uint64_t counter = 0;
+    while(1) {
+        counter++;
+        if (counter % 10000000 == 0) {
+            __asm__ volatile("hlt");
+        }
+    }
+}
+
 static void task_a() {
     int x = 0;
     while(x < 10) {
@@ -159,6 +169,7 @@ void kernel_main_high(BootInfo *bi) {
             kprint("Testing Ring 3 jump...\n");
 
             arch_task_create_user(user_test_task);
+            // arch_task_create_user(user_test_task_2);
         }
     }
 
