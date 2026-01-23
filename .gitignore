@@ -3,3 +3,4 @@ build
 vars.fd
 esp
 scripts
+.vscode
