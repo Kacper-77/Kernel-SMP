@@ -18,6 +18,7 @@ void gdt_setup_for_cpu(cpu_context_t* ctx) {
     memset(&ctx->gdt, 0, sizeof(cpu_gdt_t));
 
     // 1. CODE AND DATA
+    // KERNEL CODE
     ctx->gdt.entries[1].access = 0x9A;
     ctx->gdt.entries[1].granularity = 0x20;
     // KERNEL DATA

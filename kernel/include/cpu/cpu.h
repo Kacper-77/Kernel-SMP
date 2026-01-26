@@ -45,6 +45,8 @@ typedef struct cpu_context {
     struct cpu_context* self;       // offset 0
     uint64_t cpu_id;                // offset 8
     uint64_t lapic_id;              // offset 16
+    uint64_t user_rsp;              // offset 24
+    uint64_t kernel_stack;          // offset 32
     
     // TSS for each core
     tss_t tss;                      
@@ -60,34 +62,19 @@ typedef struct cpu_context {
     struct task* current_task;
     struct task* idle_task;
     
-    // Kernel Stack
-    uint64_t kernel_stack;
-    
     uint64_t pmm_last_index;
     uint32_t lapic_ticks_per_ms;
 } __attribute__((packed)) cpu_context_t;
 
+// Initialization of BSP and SYSCALLS
 void cpu_init_bsp();
+void cpu_init_syscalls();
 
 static inline cpu_context_t* get_cpu() {
     cpu_context_t* ptr;
 
     __asm__ volatile ("movq %%gs:0, %0" : "=r"(ptr)); 
     return ptr;
-}
-
-static inline void cpu_init_context(cpu_context_t* ctx) {
-    ctx->self = ctx;
-
-    uint64_t addr = (uintptr_t)ctx;
-    uint32_t low = (uint32_t)(addr & 0xFFFFFFFF);
-    uint32_t high = (uint32_t)(addr >> 32);
-    
-    // MSR_GS_BASE (0xC0000101)
-    __asm__ volatile ("wrmsr" : : "a"(low), "d"(high), "c"(0xC0000101) : "memory");
-
-    // MSR_KERNEL_GS_BASE (0xC0000102)
-    __asm__ volatile ("wrmsr" : : "a"(low), "d"(high), "c"(0xC0000102) : "memory");
 }
 
 static inline void cpu_enable_sse() {
@@ -106,6 +93,9 @@ static inline void cpu_enable_sse() {
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
 }
 
+//
+// CR3 READ AND WRITE
+//
 static inline uint64_t read_cr3(void) {
     uint64_t val;
     __asm__ volatile("mov %%cr3, %0" : "=r"(val));
@@ -114,6 +104,41 @@ static inline uint64_t read_cr3(void) {
 
 static inline void write_cr3(uint64_t val) {
     __asm__ volatile("mov %0, %%cr3" : : "r"(val) : "memory");
+}
+
+//
+// MSR READ AND WRITE
+//
+static inline uint64_t read_msr(uint32_t msr) {
+    uint32_t low, high;
+    __asm__ volatile (
+        "rdmsr"
+        : "=a"(low), "=d"(high)
+        : "c"(msr)
+    );
+    return ((uint64_t)high << 32) | low;
+}
+
+static inline void write_msr(uint32_t msr, uint64_t value) {
+    uint32_t low = (uint32_t)value;
+    uint32_t high = (uint32_t)(value >> 32);
+    __asm__ volatile (
+        "wrmsr"
+        :
+        : "a"(low), "d"(high), "c"(msr)
+        : "memory"
+    );
+}
+
+static inline void cpu_init_context(cpu_context_t* ctx) {
+    ctx->self = ctx;
+    uint64_t addr = (uintptr_t)ctx;
+    
+    // MSR_GS_BASE (0xC0000101)
+    write_msr(0xC0000101, addr);
+
+    // MSR_KERNEL_GS_BASE (0xC0000102)
+    write_msr(0xC0000102, addr);
 }
 
 #endif

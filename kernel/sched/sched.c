@@ -47,6 +47,9 @@ static task_t* create_idle_struct(void (*entry)(void)) {
     frame->rsp = stack_top - 8; 
     frame->ss = 0x10;
 
+    frame->vector_number = 0;
+    frame->error_code = 0;
+
     t->cr3 = read_cr3(); 
     t->is_user = false;
     t->stack_size = stack_size;
@@ -137,8 +140,8 @@ uint64_t schedule(interrupt_frame_t* frame) {
     }
 
     // If Ring 3 set return address 
-    if (scheduled_next->is_user) {
-        cpu->tss.rsp0 = scheduled_next->stack_base + scheduled_next->stack_size; 
+    if (scheduled_next->cr3 != 0 && scheduled_next->cr3 != read_cr3()) {
+        write_cr3(scheduled_next->cr3);
     }
 
     spin_unlock(&sched_lock_);

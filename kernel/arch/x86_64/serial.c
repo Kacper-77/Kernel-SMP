@@ -25,6 +25,8 @@ void write_serial(char a) {
 }
 
 void kprint(const char* s) {
+    if (!s) return;
+    
     uint64_t f = save_interrupts_and_cli();
     spin_lock(&kprint_lock_);
 

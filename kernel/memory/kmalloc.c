@@ -108,8 +108,9 @@ void* kmalloc(size_t size) {
             current->is_free = 0;
 
             void* ptr = (void*)((uintptr_t)current + sizeof(m_header_t));
-            memset(ptr, 0, current->size);
             spin_unlock(&heap_lock_);
+            
+            memset(ptr, 0, current->size);
             return ptr;
         }
         last = current;

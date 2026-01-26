@@ -45,12 +45,13 @@ protected_mode:
 
 [bits 64]
 long_mode:
-    mov ax, 0x20
+    mov ax, 0x20        
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov fs, ax
-    mov gs, ax
+    xor ax, ax          
+    mov fs, ax          ; FS = 0
+    mov gs, ax          ; GS = 0 
 
     mov rdi, [0x7000 + 24] ; cpu_context_p
     mov rsp, [0x7000 + 0]  ; trampoline_stack

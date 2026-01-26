@@ -62,19 +62,19 @@ void kernel_main_ap(cpu_context_t* ctx) {
         "wrmsr\n"
         ::: "ecx", "eax", "edx"
     );
-
-    cpu_enable_sse();
+    cpu_enable_sse(); 
 
     gdt_setup_for_cpu(ctx);
     cpu_init_context(ctx);
     idt_init();
-    
+
+    cpu_init_syscalls();
+
     vmm_enable_pat(); 
     lapic_init_ap();
-
     lapic_timer_calibrate(); 
     lapic_timer_init(10, 32);
-    sched_init_ap();
+    sched_init_ap();    
 
     if (g_bi) {
     draw_test_squares_safe(ctx->cpu_id, 

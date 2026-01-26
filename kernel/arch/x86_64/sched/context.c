@@ -1,6 +1,7 @@
 #include <sched.h>
 #include <pmm.h>
 #include <vmm.h>
+#include <idt.h>
 #include <kmalloc.h>
 #include <spinlock.h>
 #include <std_funcs.h>
@@ -41,8 +42,8 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     frame->rflags = 0x202; // IF=1
 
     // Initial RSP/RBP pointing to the top of the stack
-    frame->rsp = (uintptr_t)(stack_top - 8); 
-    frame->rbp = (uintptr_t)(stack_top - 8);
+    frame->rsp = (uintptr_t)stack_top; 
+    frame->rbp = (uintptr_t)stack_top;
 
     t->rsp = (uintptr_t)frame;
     t->state = TASK_READY;

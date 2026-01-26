@@ -28,3 +28,16 @@ void cpu_init_bsp() {
     // 5. MSR GS_BASE
     cpu_init_context(ctx);
 }
+
+void cpu_init_syscalls() {
+    extern void syscall_entry();
+    write_msr(0xC0000082, (uintptr_t)syscall_entry); // LSTAR
+
+    uint64_t star = ((uint64_t)0x0B << 48) | ((uint64_t)0x08 << 32);
+    write_msr(0xC0000081, star);
+
+    write_msr(0xC0000084, 0x202);  // SFMASK
+
+    uint64_t efer = read_msr(0xC0000080);
+    write_msr(0xC0000080, efer | 1);  // SCE bit
+}

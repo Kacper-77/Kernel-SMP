@@ -23,6 +23,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/memory)
 file(GLOB KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/cpu/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cpu/*.asm"
     "${CMAKE_CURRENT_SOURCE_DIR}/smp/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/smp/*.asm"
     "${CMAKE_CURRENT_SOURCE_DIR}/memory/*.c"

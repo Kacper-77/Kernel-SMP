@@ -15,7 +15,6 @@
 #include <spinlock.h>
 #include <panic.h>
 #include <sched.h>
-#include <process.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -27,13 +26,19 @@ int g_lock_enabled = 0;
 void kernel_main_high(BootInfo *bi);
 
 static void user_test_task() {
-    // Ring 3 - test
+    const char* msg = "Hello from Ring 3 via SYSCALL!\n";
     volatile uint64_t counter = 0;
+
     while(1) {
         counter++;
-        if (counter % 10000000 == 0) {
-            // No Syscalls yet
-            __asm__ volatile("nop");
+        if (counter % 100000000 == 0) {
+            __asm__ volatile (
+                "mov $1, %%rax\n\t"
+                "mov %0, %%rdi\n\t"
+                "syscall"
+                : : "r"(msg) : "rax", "rdi", "rcx", "r11" 
+                
+            );
         }
     }
 }
@@ -43,7 +48,7 @@ static void user_test_task_2() {
     while(1) {
         counter++;
         if (counter % 10000000 == 0) {
-            __asm__ volatile("hlt");
+            __asm__ volatile("nop");
         }
     }
 }
@@ -95,6 +100,7 @@ void kernel_main(BootInfo *bi) {
 // High-half entry point
 void kernel_main_high(BootInfo *bi) {
     cpu_init_bsp();
+    cpu_init_syscalls();
     
     idt_init();
 
@@ -168,7 +174,7 @@ void kernel_main_high(BootInfo *bi) {
 
             kprint("Testing Ring 3 jump...\n");
 
-            arch_task_create_user(user_test_task);
+            arch_task_create_user(user_test_task_2);
             // arch_task_create_user(user_test_task_2);
         }
     }

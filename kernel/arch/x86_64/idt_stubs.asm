@@ -52,8 +52,7 @@ common_stub:
     swapgs
 .no_swap_in:
 
-    mov rdi, rsp                        
-    sub rsp, 8             ; Align stack for ABI
+    mov rdi, rsp
     
     call interrupt_dispatch
     
