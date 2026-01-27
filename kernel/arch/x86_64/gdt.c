@@ -24,12 +24,12 @@ void gdt_setup_for_cpu(cpu_context_t* ctx) {
     // KERNEL DATA
     ctx->gdt.entries[2].access = 0x92;
     ctx->gdt.entries[2].granularity = 0x00;
-    // USER CODE
-    ctx->gdt.entries[3].access = 0xFA;
-    ctx->gdt.entries[3].granularity = 0x20;
     // USER DATA
-    ctx->gdt.entries[4].access = 0xF2;
-    ctx->gdt.entries[4].granularity = 0x00;
+    ctx->gdt.entries[3].access = 0xF2;
+    ctx->gdt.entries[3].granularity = 0x00;
+    // USER CODE
+    ctx->gdt.entries[4].access = 0xFA;
+    ctx->gdt.entries[4].granularity = 0x20;
 
     // 2. TSS CONFIG
     uintptr_t tss_addr = (uintptr_t)&ctx->tss;

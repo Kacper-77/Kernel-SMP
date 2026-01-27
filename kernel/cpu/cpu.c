@@ -31,13 +31,13 @@ void cpu_init_bsp() {
 
 void cpu_init_syscalls() {
     extern void syscall_entry();
-    write_msr(0xC0000082, (uintptr_t)syscall_entry); // LSTAR
+    write_msr(0xC0000082, (uintptr_t)syscall_entry); 
 
-    uint64_t star = ((uint64_t)0x0B << 48) | ((uint64_t)0x08 << 32);
+    uint64_t star = ((uint64_t)0x13 << 48) | ((uint64_t)0x08 << 32);
     write_msr(0xC0000081, star);
 
-    write_msr(0xC0000084, 0x202);  // SFMASK
+    write_msr(0xC0000084, 0x202);  
 
     uint64_t efer = read_msr(0xC0000080);
-    write_msr(0xC0000080, efer | 1);  // SCE bit
+    write_msr(0xC0000080, efer | 1);  
 }

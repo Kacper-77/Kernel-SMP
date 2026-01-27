@@ -106,8 +106,8 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     memset(frame, 0, sizeof(interrupt_frame_t));
 
     frame->rip = (uintptr_t)entry_point;
-    frame->cs  = 0x1B;     // User Code Selector (Index 3, RPL 3)
-    frame->ss  = 0x23;     // User Data Selector (Index 4, RPL 3)
+    frame->cs  = 0x23;     // User Code Selector (Index 3, RPL 3)
+    frame->ss  = 0x1B;     // User Data Selector (Index 4, RPL 3)
     frame->rflags = 0x202; // IF=1 (Enable interrupts)
     
     // The user stack pointer the CPU will switch to upon iretq

@@ -26,18 +26,14 @@ int g_lock_enabled = 0;
 void kernel_main_high(BootInfo *bi);
 
 static void user_test_task() {
-    const char* msg = "Hello from Ring 3 via SYSCALL!\n";
     volatile uint64_t counter = 0;
 
     while(1) {
         counter++;
         if (counter % 100000000 == 0) {
             __asm__ volatile (
-                "mov $1, %%rax\n\t"
-                "mov %0, %%rdi\n\t"
                 "syscall"
-                : : "r"(msg) : "rax", "rdi", "rcx", "r11" 
-                
+                : : "a"(2) : "rcx", "r11"
             );
         }
     }
@@ -51,6 +47,7 @@ static void user_test_task_2() {
             __asm__ volatile("nop");
         }
     }
+    task_exit();
 }
 
 static void task_a() {

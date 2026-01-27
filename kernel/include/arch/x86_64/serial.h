@@ -8,5 +8,6 @@ int is_transmit_empty();
 void write_serial(char a);
 void kprint(const char* s);
 void kprint_hex(uint64_t value);
+void kprint_raw(const char* s);
 
 #endif

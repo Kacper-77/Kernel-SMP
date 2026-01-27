@@ -2,25 +2,18 @@
 #include <serial.h>
 #include <sched.h>
 
-void syscall_handler(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) {
+uint64_t syscall_handler(interrupt_frame_t* frame) {
+    uint64_t num = frame->rax;
+    
     switch (num) {
         case SYS_KPRINT:
-            kprint((const char*)arg1); 
+            kprint((const char*)frame->rdi); 
             break;
-
-        case SYS_YIELD:
-            sched_yield();
-            break;
-
+            
         case SYS_EXIT:
-            kprint("[USER] Task requested exit.\n");
             task_exit();
             break;
-
-        default:
-            kprint("[SYSCALL] Unknown syscall number: ");
-            kprint_hex(num);
-            kprint("\n");
-            break;
     }
+
+    return (uint64_t)frame; 
 }

@@ -55,3 +55,11 @@ void kprint_hex(uint64_t value) {
     spin_unlock(&kprint_lock_);
     restore_interrupts(f);
 }
+
+void kprint_raw(const char* s) {
+    if (!s) return;
+    while (*s) {
+        if (*s == '\n') write_serial('\r');
+        write_serial(*s++);
+    }
+}

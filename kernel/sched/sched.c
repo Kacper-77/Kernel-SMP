@@ -44,7 +44,7 @@ static task_t* create_idle_struct(void (*entry)(void)) {
     frame->rip = (uintptr_t)entry;
     frame->cs = 0x08;
     frame->rflags = 0x202; 
-    frame->rsp = stack_top - 8; 
+    frame->rsp = stack_top - 8;
     frame->ss = 0x10;
 
     frame->vector_number = 0;
@@ -179,8 +179,10 @@ void task_exit() {
     spin_unlock(&sched_lock_);
 
     // 4. Trigger immediate reschedule via timer interrupt vector
-    __asm__ volatile("int $32"); 
-    while(1);
+    while(1) {
+        sched_yield(); 
+        __asm__ volatile("hlt");
+    }
 }
 
 //
