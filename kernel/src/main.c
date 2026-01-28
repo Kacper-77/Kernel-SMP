@@ -50,6 +50,18 @@ static void user_test_task_2() {
     task_exit();
 }
 
+static void user_test_task_3() {
+    volatile int counter = 0;
+    const char* msg = "RING 3 SYSCALL!\n";
+    while(counter < 10) {
+        __asm__ volatile ("syscall" : : "a"(1), "D"(msg) : "rcx", "r11");
+        
+        for(volatile uint64_t i = 0; i < 50000000; i++); 
+        counter++;
+    }
+    __asm__ volatile ("syscall" : : "a"(2) : "rcx", "r11");
+}
+
 static void task_a() {
     int x = 0;
     while(x < 10) {
@@ -171,12 +183,13 @@ void kernel_main_high(BootInfo *bi) {
 
             kprint("Testing Ring 3 jump...\n");
 
+            arch_task_create_user(user_test_task);
+            arch_task_create_user(user_test_task_3);
             arch_task_create_user(user_test_task_2);
-            // arch_task_create_user(user_test_task_2);
         }
     }
 
-    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x20000000);
+    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x1000);
     kprint("Kernel isolated.\n");
 
     __asm__ volatile("sti");

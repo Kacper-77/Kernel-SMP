@@ -42,15 +42,15 @@ static void ap_test_task2() {
 }
 
 static void user_test_task_ap() {
-    // Ring 3 - test
-    volatile uint64_t counter = 0;
-    while(1) {
+    volatile int counter = 0;
+    const char* msg = "RING 3 AP AP AP AP AP\n";
+    while(counter < 10) {
+        __asm__ volatile ("syscall" : : "a"(1), "D"(msg) : "rcx", "r11");
+        
+        for(volatile uint64_t i = 0; i < 50000000; i++); 
         counter++;
-        if (counter % 10000000 == 0) {
-            // No Syscalls yet
-            __asm__ volatile("nop");
-        }
     }
+    __asm__ volatile ("syscall" : : "a"(2) : "rcx", "r11");
 }
 
 void kernel_main_ap(cpu_context_t* ctx) {
@@ -96,7 +96,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
 
     arch_task_create(ap_test_task);
     arch_task_create(ap_test_task2);
-    arch_task_create(user_test_task_ap);
+    arch_task_create_user(user_test_task_ap);
 
     __asm__ volatile("sti");
 

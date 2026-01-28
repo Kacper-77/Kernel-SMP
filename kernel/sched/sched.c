@@ -135,13 +135,17 @@ uint64_t schedule(interrupt_frame_t* frame) {
     scheduled_next->cpu_id = cpu->cpu_id;
     cpu->current_task = scheduled_next;
 
-    if (scheduled_next->cr3 != 0 && scheduled_next->cr3 != read_cr3()) {
-        write_cr3(scheduled_next->cr3);
-    }
+    cpu->current_task = scheduled_next;
 
-    // If Ring 3 set return address 
-    if (scheduled_next->cr3 != 0 && scheduled_next->cr3 != read_cr3()) {
-        write_cr3(scheduled_next->cr3);
+    // Set stack for syscall/interrupt
+    cpu->tss.rsp0 = (uintptr_t)scheduled_next->stack_base + scheduled_next->stack_size;
+    cpu->kernel_stack = cpu->tss.rsp0;
+
+    if (scheduled_next->cr3 != 0) {
+        uint64_t current_cr3 = read_cr3();
+        if (scheduled_next->cr3 != current_cr3) {
+            write_cr3(scheduled_next->cr3);
+        }
     }
 
     spin_unlock(&sched_lock_);

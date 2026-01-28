@@ -239,7 +239,7 @@ void vmm_init(BootInfo* bi) {
     uintptr_t text_phys = KERNEL_PHYS_BASE + ((uintptr_t)_text_start - KERNEL_VIRT_BASE);
     size_t text_size = (size_t)(_text_end - _text_start);
     vmm_map_range(local_pml4, (uintptr_t)_text_start, text_phys, text_size, 
-                PTE_PRESENT | PTE_USER);  // USER FOR TEST!!!
+                PTE_PRESENT);
 
     // 3.1 Read-Only Data (.rodata)
     uintptr_t rodata_phys = KERNEL_PHYS_BASE + ((uintptr_t)_rodata_start - KERNEL_VIRT_BASE);

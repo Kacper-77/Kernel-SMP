@@ -73,44 +73,33 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     if (!t) return NULL;
     memset(t, 0, sizeof(task_t));
 
-    // Allocate Kernel Stack (used when entering Ring 0 from Ring 3)
     t->stack_size = 0x4000;
     t->stack_base = (uintptr_t)kmalloc(t->stack_size);
-    if (!t->stack_base) {
-        kfree(t);
-        return NULL;
-    }
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;
 
-    // Create a new Page Table (PML4) for the user process
-    // This clones the kernel mappings so the task can still "see" the kernel
     t->cr3 = (uintptr_t)vmm_create_user_pml4();
-    if (!t->cr3) {
-        kfree((void*)t->stack_base);
-        kfree(t);
-        return NULL;
-    }
+    page_table_t* pml4_virt = vmm_get_table(t->cr3);
+
+    // Alloc page for user code (low addr)
+    uintptr_t code_phys = (uintptr_t)pmm_alloc_frame();
+    uintptr_t code_virt = 0x400000;
+    vmm_map(pml4_virt, code_virt, code_phys, 0x07); // P | W | U
+
+    memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 1024);
 
     // Setup User Stack
     uintptr_t user_stack_phys = (uintptr_t)pmm_alloc_frame();
     uintptr_t user_stack_virt = 0x00007FFFF0000000; 
-    
-    // Map the user stack into the task's private address space
-    // Flags: Present + Writable + User
-    page_table_t* pml4_virt = vmm_get_table(t->cr3);
     vmm_map(pml4_virt, user_stack_virt, user_stack_phys, 0x07); 
 
-    // Prepare the Interrupt Frame on the KERNEL stack
-    // When the scheduler switches to this task, iretq will pop these values
     interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
 
-    frame->rip = (uintptr_t)entry_point;
-    frame->cs  = 0x23;     // User Code Selector (Index 3, RPL 3)
-    frame->ss  = 0x1B;     // User Data Selector (Index 4, RPL 3)
-    frame->rflags = 0x202; // IF=1 (Enable interrupts)
+    frame->rip = code_virt;  // Back to low addr
+    frame->cs  = 0x23;     
+    frame->ss  = 0x1B;     
+    frame->rflags = 0x202; 
     
-    // The user stack pointer the CPU will switch to upon iretq
     frame->rsp = user_stack_virt + 0x1000; 
     frame->rbp = frame->rsp;
 
@@ -119,7 +108,6 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     t->state = TASK_READY;
     t->cpu_id = -1;
 
-    // Add to the scheduler's task list
     spin_lock(&sched_lock_);
     t->tid = next_tid++;
     t->next = root_task->next;
