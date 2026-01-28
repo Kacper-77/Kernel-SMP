@@ -83,7 +83,7 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     // Alloc page for user code (low addr)
     uintptr_t code_phys = (uintptr_t)pmm_alloc_frame();
     uintptr_t code_virt = 0x400000;
-    vmm_map(pml4_virt, code_virt, code_phys, 0x07); // P | W | U
+    vmm_map(pml4_virt, code_virt, code_phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
 
     memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 1024);
 
