@@ -81,11 +81,13 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     page_table_t* pml4_virt = vmm_get_table(t->cr3);
 
     // Alloc page for user code (low addr)
-    uintptr_t code_phys = (uintptr_t)pmm_alloc_frame();
+    uintptr_t code_phys = (uintptr_t)pmm_alloc_frames(4);
     uintptr_t code_virt = 0x400000;
-    vmm_map(pml4_virt, code_virt, code_phys, PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+    vmm_map_range(pml4_virt, code_virt, code_phys, 4 * PAGE_SIZE, 
+              PTE_PRESENT | PTE_WRITABLE | PTE_USER);
 
-    memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 1024);
+    memset((void*)phys_to_virt(code_phys), 0, 4 * PAGE_SIZE);
+    memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 4 * PAGE_SIZE);
 
     // Setup User Stack
     uintptr_t user_stack_phys = (uintptr_t)pmm_alloc_frame();
@@ -100,7 +102,7 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     frame->ss  = 0x1B;     
     frame->rflags = 0x202; 
     
-    frame->rsp = user_stack_virt + 0x1000; 
+    frame->rsp = user_stack_virt + 0x1000 - 8; 
     frame->rbp = frame->rsp;
 
     t->rsp = (uintptr_t)frame;

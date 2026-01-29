@@ -34,7 +34,6 @@ syscall_entry:
 
     mov rdi, rsp            
     call syscall_handler 
-
     mov rsp, rax
 
     pop r15

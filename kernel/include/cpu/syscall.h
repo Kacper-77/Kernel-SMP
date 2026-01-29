@@ -5,6 +5,8 @@
 
 #define SYS_KPRINT 1
 #define SYS_EXIT   2
-#define SYS_YIELD  3
+#define SYS_GET_UPTIME 3
+
+#define SYS_YIELD  4 // Unused for now
 
 #endif

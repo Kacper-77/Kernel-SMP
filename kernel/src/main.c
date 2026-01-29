@@ -15,6 +15,7 @@
 #include <spinlock.h>
 #include <panic.h>
 #include <sched.h>
+#include <userlib.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -40,26 +41,32 @@ static void user_test_task() {
 }
 
 static void user_test_task_2() {
+    char msg[] = "Task 2 is spinning...\n";
+    char msg2[] = "Task 2 is done. Requesting exit...\n";
+    
     volatile uint64_t counter = 0;
-    while(1) {
+    while(counter < 5) {
+        u_print(msg);
+        
+        for(volatile uint64_t i = 0; i < 50000000; i++);
         counter++;
-        if (counter % 10000000 == 0) {
-            __asm__ volatile("nop");
-        }
     }
-    task_exit();
+
+    u_print(msg2);
+    u_exit();
 }
 
-static void user_test_task_3() {
-    volatile int counter = 0;
-    const char* msg = "RING 3 SYSCALL!\n";
-    while(counter < 10) {
-        __asm__ volatile ("syscall" : : "a"(1), "D"(msg) : "rcx", "r11");
-        
-        for(volatile uint64_t i = 0; i < 50000000; i++); 
-        counter++;
-    }
-    __asm__ volatile ("syscall" : : "a"(2) : "rcx", "r11");
+__attribute__((naked)) static void user_test_task_3() {
+    __asm__ volatile (
+        ".code64\n"
+        "mov $1, %%rax\n"          // SYS_KPRINT
+        "lea 1f(%%rip), %%rdi\n"  
+        "syscall\n"
+        "mov $2, %%rax\n"          // SYS_EXIT
+        "syscall\n"
+        "1: .asciz \"Hi from Ring 3!\\n\" \n"
+        : : : "rax", "rdi", "rcx", "r11"
+    );
 }
 
 static void task_a() {

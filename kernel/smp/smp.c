@@ -11,6 +11,7 @@
 #include <serial.h>
 #include <timer.h>
 #include <sched.h>
+#include <userlib.h>
 
 #include <test.h>
 
@@ -43,14 +44,14 @@ static void ap_test_task2() {
 
 static void user_test_task_ap() {
     volatile int counter = 0;
-    const char* msg = "RING 3 AP AP AP AP AP\n";
-    while(counter < 10) {
-        __asm__ volatile ("syscall" : : "a"(1), "D"(msg) : "rcx", "r11");
+    char msg[] = "RING 3 AP AP AP AP AP\n";
+    while(counter < 5) {
+        u_print(msg);
         
         for(volatile uint64_t i = 0; i < 50000000; i++); 
         counter++;
     }
-    __asm__ volatile ("syscall" : : "a"(2) : "rcx", "r11");
+    u_exit();
 }
 
 void kernel_main_ap(cpu_context_t* ctx) {
