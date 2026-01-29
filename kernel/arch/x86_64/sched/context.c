@@ -89,7 +89,7 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     memset((void*)phys_to_virt(code_phys), 0, 4 * PAGE_SIZE);
     memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 4 * PAGE_SIZE);
 
-    // Setup User Stack
+    // Setup User Stack 
     uintptr_t user_stack_phys = (uintptr_t)pmm_alloc_frame();
     uintptr_t user_stack_virt = 0x00007FFFF0000000; 
     vmm_map(pml4_virt, user_stack_virt, user_stack_phys, 0x07); 
