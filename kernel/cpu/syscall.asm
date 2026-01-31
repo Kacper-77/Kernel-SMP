@@ -4,38 +4,40 @@ extern syscall_handler
 
 syscall_entry:
     swapgs
-    mov [gs:0x18], rsp      ; 0x18 = offset user_rsp
-    mov rsp, [gs:0x20]      ; 0x20 = offset kernel_stack
+    mov [gs:0x18], rsp      ; Save user stack
+    mov rsp, [gs:0x20]      ; Load kernel stack
 
-    push qword 0x1B     
-    push qword [gs:0x18]
-    push r11        
-    push qword 0x23 
-    push rcx    
+    ; BUILDING FRAME
+    push qword 0x23         ; SS 
+    push qword [gs:0x18]    ; RSP 
+    push r11                ; RFLAGS 
+    push qword 0x1B         ; CS 
+    push rcx                ; RIP 
+    push qword 0            ; error_code
+    push qword 0            ; vector_number
 
-    push qword 0
-    push qword 0
+    ; PUSH ALL REGS
+    push rax
+    push rcx
+    push rdx
+    push rbx
+    push rbp
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
 
-    push rax                
-    push rcx                
-    push rdx                
-    push rbx                
-    push rbp                
-    push rsi                
-    push rdi                
-    push r8                 
-    push r9                 
-    push r10                
-    push r11                
-    push r12                
-    push r13                
-    push r14                
-    push r15                
-
-    mov rdi, rsp            
+    mov rdi, rsp            ; Stack pointer
     call syscall_handler 
-    mov rsp, rax
+    mov rsp, rax            ; Allows to change task
 
+    ; RESTORE ALL REGS
     pop r15
     pop r14
     pop r13
@@ -52,14 +54,7 @@ syscall_entry:
     pop rcx
     pop rax
 
-    add rsp, 16
-
-    pop rcx  
-    add rsp, 8
-    pop r11   
-    
-    pop qword [gs:0x18]     
-    add rsp, 8              ; Skip SS
-    mov rsp, [gs:0x18]      
-    swapgs
-    o64 sysret      ;
+    add rsp, 16             ; Skip vector_number and error_code
+          
+    swapgs                  ; Restore user GS
+    iretq                   ; !!! iretq for now, will be changed !!!

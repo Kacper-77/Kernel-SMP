@@ -47,8 +47,7 @@ static void user_test_task_ap() {
     char msg[] = "RING 3 AP AP AP AP AP\n";
     while(counter < 5) {
         u_print(msg);
-        
-        for(volatile uint64_t i = 0; i < 50000000; i++); 
+        u_sleep(1000);
         counter++;
     }
     u_exit();

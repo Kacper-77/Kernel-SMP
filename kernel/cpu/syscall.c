@@ -8,6 +8,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+/*
+                    !!!!! IMPORTANT JUMP TABLE IN FUTURE !!!!!
+*/
+
 #define KERNEL_SPACE_START 0xFFFF800000000000
 #define USER_SPACE_END     0x00007FFFFFFFFFFF
 
@@ -49,8 +53,6 @@ static uint64_t sys_kprint(const char* str) {
 uint64_t syscall_handler(interrupt_frame_t* frame) {
     uint64_t res = 0;
     uintptr_t sys_num = frame->rax;
-
-    // __asm__ volatile("sti");
     
     switch (sys_num) {
         case SYS_KPRINT:  // RDI: const char* string
@@ -65,6 +67,16 @@ uint64_t syscall_handler(interrupt_frame_t* frame) {
             res = get_uptime_ms();
             break;
 
+        case SYS_SLEEP:
+        {   
+            task_t* current = sched_get_current();
+            // RDI - ms
+            current->sleep_until = get_uptime_ms() + frame->rdi;
+            current->state = TASK_SLEEPING;
+            frame->rax = 0;
+        }
+            return (uint64_t)schedule(frame);
+
         default:
             kprint("Unknown Syscall Number: ");
             kprint_hex(sys_num);
@@ -72,9 +84,7 @@ uint64_t syscall_handler(interrupt_frame_t* frame) {
             res = -1;
             break;
     }
-    __asm__ volatile("cli");
     frame->rax = res;  // Sys V ABI compatibility
 
-    // Always call scheduler (Preemptive)
-    return (uint64_t)schedule(frame); 
+    return (uintptr_t)frame; 
 }

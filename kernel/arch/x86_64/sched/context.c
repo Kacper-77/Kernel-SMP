@@ -98,8 +98,8 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     memset(frame, 0, sizeof(interrupt_frame_t));
 
     frame->rip = code_virt;  // Back to low addr
-    frame->cs  = 0x23;     
-    frame->ss  = 0x1B;     
+    frame->cs  = 0x1B;     
+    frame->ss  = 0x23;     
     frame->rflags = 0x202; 
     
     frame->rsp = user_stack_virt + 0x1000 - 8; 

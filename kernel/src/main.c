@@ -48,7 +48,7 @@ static void user_test_task_2() {
     while(counter < 5) {
         u_print(msg);
         
-        for(volatile uint64_t i = 0; i < 50000000; i++);
+        u_sleep(2000);
         counter++;
     }
 

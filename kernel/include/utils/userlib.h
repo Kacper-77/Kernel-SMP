@@ -17,5 +17,6 @@ static inline uint64_t do_syscall(uint64_t num, uint64_t arg1) {
 static inline void u_print(const char* s) { do_syscall(1, (uintptr_t)s); }
 static inline void u_exit() { do_syscall(2, 0); }
 static inline uint64_t u_get_uptime() { return do_syscall(3, 0); }
+static inline void u_sleep(uint64_t ms) { do_syscall(4, ms); }
 
 #endif
