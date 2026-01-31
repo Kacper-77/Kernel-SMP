@@ -59,14 +59,15 @@ static void user_test_task_2() {
 __attribute__((naked)) static void user_test_task_3() {
     __asm__ volatile (
         ".code64\n"
-        "mov $1, %%rax\n"          // SYS_KPRINT
+        "mov $1, %%rax\n"          
         "lea 1f(%%rip), %%rdi\n"  
         "syscall\n"
-        "mov $2, %%rax\n"          // SYS_EXIT
+        "mov $2, %%rax\n"          
         "syscall\n"
         "1: .asciz \"Hi from Ring 3!\\n\" \n"
         : : : "rax", "rdi", "rcx", "r11"
     );
+    // __asm__ volatile("hlt");
 }
 
 static void task_a() {
