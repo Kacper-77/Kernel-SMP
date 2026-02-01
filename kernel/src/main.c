@@ -16,12 +16,15 @@
 #include <panic.h>
 #include <sched.h>
 #include <userlib.h>
+#include <syscall.h>
 
 #include <stdint.h>
 #include <stddef.h>
 
 // Global spinlock flag
 int g_lock_enabled = 0;
+
+syscall_ptr_t sys_table[10] = { 0 };
 
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
@@ -118,6 +121,7 @@ void kernel_main(BootInfo *bi) {
 void kernel_main_high(BootInfo *bi) {
     cpu_init_bsp();
     cpu_init_syscalls();
+    init_sys_table();
     
     idt_init();
 

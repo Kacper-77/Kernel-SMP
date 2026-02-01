@@ -168,6 +168,7 @@ void sched_init_ap() {
 void task_exit() {
     // 1. Get current task
     task_t* current = sched_get_current();
+    if (!current) return;
 
     // 2. Lock scheduler
     spin_lock(&sched_lock_);
