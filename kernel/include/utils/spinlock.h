@@ -6,6 +6,10 @@
 
 extern int g_lock_enabled;
 
+// NOTE FOR ME
+// Spinlock must be light
+// Mutexes and semaphores are crucial
+
 typedef struct {
     volatile int lock;
     volatile int owner;     // ID (-1 is none)
@@ -46,12 +50,14 @@ static inline void spin_lock(spinlock_t* target) {
     }
 
     while (__sync_lock_test_and_set(&(target->lock), 1)) {
-        __asm__ volatile("pause");
+        while (target->lock) {
+            __asm__ volatile("pause");
+        }
     }
 
     __sync_synchronize();
     target->owner = cpu_id;
-    target->recursion = 1;
+    target->recursion = 1; 
 }
 
 static inline void spin_unlock(spinlock_t* target) {
@@ -61,10 +67,6 @@ static inline void spin_unlock(spinlock_t* target) {
     
     if (target->owner != cpu_id) {
         panic("spin_unlock: CPU tried to unlock foreign spinlock");
-    }
-
-    if (target->recursion <= 0) {
-        panic("spin_unlock: recursion underflow");
     }
 
     target->recursion--;

@@ -2,6 +2,13 @@
 global syscall_entry
 extern syscall_handler
 
+;
+; Low-level entry point for system calls.
+; This handler bridges the gap between the fast 'syscall' instruction
+; and the kernel's C-level handler, creating a compatible interrupt frame.
+; Currently uses 'iretq' for maximum stability during the SMP development phase.
+;
+
 syscall_entry:
     swapgs
     mov [gs:0x18], rsp      ; Save user stack

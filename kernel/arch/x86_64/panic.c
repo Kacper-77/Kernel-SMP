@@ -4,6 +4,11 @@
 #include <cpu.h>
 #include <spinlock.h>
 
+//
+// Broadcasts a Halt IPI to all other CPU cores.
+// This is typically called during a fatal panic to prevent data corruption.
+// Note: This does not halt the current core.
+//
 void smp_halt_others(void) {
     lapic_broadcast_ipi(IPI_VECTOR_HALT);
 }

@@ -51,7 +51,9 @@ void kmalloc_dump() {
 }
 
 //
-// INIT
+// Initializes the kernel heap by allocating the first physical frame.
+// Sets up the initial free block header and protects the operation with a spinlock
+// to ensure BSP/AP synchronization during early boot.
 //
 void kmalloc_init() {
     spin_lock(&heap_lock_);
@@ -76,7 +78,10 @@ void kmalloc_init() {
 }
 
 //
-// KMALLOC AND KFREE
+// Allocates a block of kernel memory using the First Fit algorithm.
+// If no suitable free block is found, it automatically expands the heap 
+// by requesting new frames from the Physical Memory Manager (PMM).
+// Includes block splitting logic to minimize internal fragmentation.
 //
 void* kmalloc(size_t size) {
     if (size == 0) return NULL;
@@ -157,6 +162,11 @@ void* kmalloc(size_t size) {
     return (void*)((uintptr_t)new_block + sizeof(m_header_t));
 }
 
+//
+// Frees a previously allocated memory block and performs immediate coalescing.
+// Checks for heap corruption via magic numbers and guards against double-free.
+// Adjacent free blocks are merged to maintain large contiguous memory regions.
+//
 void kfree(void* ptr) {
     if (!ptr) return;
 

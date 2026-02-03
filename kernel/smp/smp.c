@@ -53,6 +53,13 @@ static void user_test_task_ap() {
     u_exit();
 }
 
+//
+// High-level entry point for Application Processors (APs).
+// This function is called after the AP transitions from real mode (trampoline)
+// to long mode. It initializes CPU-local structures (GDT, IDT, TSS), 
+// enables system features (SSE, Syscalls, PAT), and starts the local scheduler.
+// "ctx" Pointer to the CPU-specific context structure.
+//
 void kernel_main_ap(cpu_context_t* ctx) {
     // NXE
     __asm__ volatile(
@@ -107,6 +114,11 @@ void kernel_main_ap(cpu_context_t* ctx) {
     }
 }
 
+//
+// Prepares and boots a single AP.
+// Sets up the trampoline code in low memory, allocates the kernel stack,
+// and fills the configuration block that the AP reads during its early boot.
+//
 void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
     ap_config_t* config = (ap_config_t*)phys_to_virt(AP_CONFIG_PHYS_ADDR);
     
@@ -142,6 +154,9 @@ void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
     while(config->trampoline_ready == 0) __asm__("pause");
 }
 
+//
+// Scans ACPI MADT table to find and initialize all available CPUs.
+//
 void smp_init(BootInfo* bi) {
     g_bi = bi;
     acpi_rsdp_t* rsdp = (acpi_rsdp_t*)phys_to_virt((uintptr_t)bi->acpi.rsdp);
@@ -164,27 +179,32 @@ void smp_init(BootInfo* bi) {
     }
 }
 
+//
+// Executes the standard x86 AP boot sequence (INIT-SIPI-SIPI).
+// apic_id The target Local APIC ID.
+// vector The interrupt vector pointing to the trampoline code (vector << 12).
+//
 void boot_ap(uint32_t apic_id, uint8_t vector) {
     // 1. INIT IPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_INIT | ICR_ASSERT | ICR_LEVEL);
 
     lapic_wait_for_delivery();
-    for(volatile int i = 0; i < 10000000; i++) __asm__("pause");
+    msleep(1);
 
     // 2. First SIPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
     lapic_wait_for_delivery();
-    for(volatile int i = 0; i < 1000000; i++) __asm__("pause");
+    msleep(1);
 
     // 3. Second SIPI (optional but good practice)
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
     lapic_wait_for_delivery();
-    for(volatile int i = 0; i < 1000000; i++) __asm__("pause");
+    msleep(1);
 }
 
 uint64_t get_cpu_count_test() {

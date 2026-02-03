@@ -12,8 +12,10 @@ task_t* root_task = NULL;
 spinlock_t sched_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 
 //
-// Low-priority task that runs when no other tasks are ready.
-// CPU 0 also performs zombie process cleanup (reaping).
+// The Idle Task: The ultimate fallback for the CPU when no tasks are ready.
+// It keeps the processor in a low-power state (HLT). On CPU 0, this task 
+// also acts as the 'Reaper', responsible for deallocating ZOMBIE tasks 
+// to prevent memory leaks in the scheduler.
 //
 static void idle_task() {
     while (1) {
@@ -83,8 +85,11 @@ void sched_init() {
 }
 
 //
-// Main scheduling algorithm (Round Robin with Sleep support).
-// Called from the timer interrupt handler.
+// The core Round-Robin scheduler with support for task sleeping and CPU affinity.
+// 1. Saves the context of the interrupted task.
+// 2. Wakes up tasks that have finished their 'msleep'.
+// 3. Selects the next READY task, allowing migration for non-system tasks (TID >= 10).
+// 4. Updates TSS for the next interrupt/syscall and performs a CR3 switch if necessary.
 //
 uint64_t schedule(interrupt_frame_t* frame) {
     spin_lock(&sched_lock_);
@@ -153,7 +158,9 @@ uint64_t schedule(interrupt_frame_t* frame) {
 }
 
 //
-// Initializes the scheduler for APs
+// Bootstraps the scheduler on an Application Processor (AP).
+// Creates a CPU-specific idle context and sets it as the starting task,
+// allowing the AP to begin accepting work from the global task list.
 //
 void sched_init_ap() {
     cpu_context_t* cpu = get_cpu();
@@ -163,7 +170,9 @@ void sched_init_ap() {
 }
 
 //
-// Marks current task as ZOMBIE and yields the CPU.
+// Gracefully terminates the current task. Marks the task as a ZOMBIE,
+// allowing its memory to be safely reclaimed by the Reaper on a different
+// execution context. Triggers an immediate reschedule.
 //
 void task_exit() {
     // 1. Get current task
@@ -191,7 +200,9 @@ void task_exit() {
 }
 
 //
-// Scans the task list and frees memory of ZOMBIE tasks.
+// The Kernel Reaper: Scans the global task list to physically free memory
+// associated with terminated (ZOMBIE) tasks. This ensures that kernel stacks 
+// and task structures are recycled.
 //
 void sched_reap() {
     // 1. Lock before cleaning

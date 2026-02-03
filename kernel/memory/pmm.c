@@ -15,25 +15,37 @@ uint64_t bitmap_size = 0;
 static spinlock_t pmm_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 
 //
-// Helpers
+// Updates the physical memory bitmap by marking a specific 4KB frame as used (1).
+// This is a low-level helper used during allocation and manual frame reservations.
 //
 void pmm_set_frame(uint64_t frame_addr) {
     uint64_t frame_index = frame_addr / PAGE_SIZE;
     bitmap[frame_index / 8] |= (1 << (frame_index % 8));
 }
 
+//
+// Marks a specific 4KB frame as free (0) in the physical memory bitmap.
+//
 void pmm_unset_frame(uint64_t frame_addr) {
     uint64_t frame_index = frame_addr / PAGE_SIZE;
     bitmap[frame_index / 8] &= ~(1 << (frame_index % 8));
 }
 
+//
+// Checks specific frame.
+//
 int pmm_is_frame_set(uint64_t frame_addr) {
     uint64_t frame_index = frame_addr / PAGE_SIZE;
     return (bitmap[frame_index / 8] & (1 << (frame_index % 8))) != 0;
 }
 
 //
-// INIT
+// Initializes the Physical Memory Manager using the EFI Memory Map.
+// Performs three passes:
+// 1. Determines the highest physical address to size the bitmap.
+// 2. Finds a large enough contiguous free region to store the bitmap.
+// 3. Marks usable RAM (Conventional Memory) as free, while protecting 
+//    the first 1MB, the kernel, and the bitmap itself.
 //
 void pmm_init(BootInfo* boot_info) {
     uint64_t highest_addr = 0;
@@ -90,7 +102,9 @@ void pmm_init(BootInfo* boot_info) {
 }
 
 //
-// ALLOC and FREE
+// Allocates a single 4KB physical frame.
+// Uses a per-CPU hint (pmm_last_index) to speed up the search and reduce
+// lock contention in SMP environments. Returns a 4KB-aligned physical address.
 //
 void* pmm_alloc_frame() {
     if (bitmap == NULL) return NULL;
@@ -125,8 +139,16 @@ void* pmm_alloc_frame() {
     return NULL; 
 }
 
+//
+// Allocates multiple contiguous physical frames.
+// Used primarily for large data structures like kernel stacks or initial paging tables.
+// Search is performed globally from the start of the bitmap.
+//
 void* pmm_alloc_frames(size_t count) {
     if (bitmap == NULL || count == 0) return NULL;
+
+    // Idiot proof
+    if (count == 1) return pmm_alloc_frame();
 
     spin_lock(&pmm_lock_);
 
@@ -178,7 +200,9 @@ if (!frame) return;
 }
 
 //
-// Need to be called after CR3 is loaded
+// Adjusts the bitmap pointer to use the Higher Half Direct Map (HHDM) address.
+// This must be called after the virtual memory manager is initialized and 
+// CR3 is loaded, allowing the PMM to be accessible in virtual address space.
 //
 void pmm_move_to_high_half() {
     if (bitmap != NULL && (uintptr_t)bitmap < HHDM_OFFSET) {

@@ -10,8 +10,10 @@ static uint64_t next_tid = 10;  // Start TIDs for user/test tasks at 10
 
 
 //
-// Architecture-specific task creation. 
-// Sets up the initial stack and interrupt frame.
+// Creates a new kernel-mode task.
+// Allocates a dedicated 16KB stack and prepares an interrupt frame 
+// that allows the scheduler to "return" into the task for the first time.
+// The task is marked with CPU affinity -1, allowing it to start on any available core.
 //
 task_t* arch_task_create(void (*entry_point)(void)) {
     extern task_t* root_task;
@@ -36,9 +38,9 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     interrupt_frame_t* frame = (interrupt_frame_t*)(stack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
 
-    frame->rip = (uintptr_t)entry_point;
-    frame->cs  = 0x08;
-    frame->ss  = 0x10;
+    frame->rip    = (uintptr_t)entry_point;
+    frame->cs     = 0x08;
+    frame->ss     = 0x10;
     frame->rflags = 0x202; // IF=1
 
     // Initial RSP/RBP pointing to the top of the stack
@@ -52,7 +54,7 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     // Lock scheduler to safely modify the global circular list
     spin_lock(&sched_lock_);
     
-    t->tid = next_tid++;
+    t->tid  = next_tid++;
     t->next = root_task->next;
     root_task->next = t;
     
@@ -62,8 +64,12 @@ task_t* arch_task_create(void (*entry_point)(void)) {
 }
 
 //
-// Architecture-specific user task creation.
-// Sets up a private address space, user stack, and kernel stack.
+// Creates a new user-mode (Ring 3) process.
+// This involves:
+// 1. Creating a private PML4 (address space) with kernel mapping mirrored.
+// 2. Mapping physical frames for user code at 0x400000.
+// 3. Mapping a dedicated user stack in high-canonical user space.
+// 4. Setting up segment selectors (0x1B for CS, 0x23 for SS) for Ring 3 transition.
 //
 task_t* arch_task_create_user(void (*entry_point)(void)) {
     extern task_t* root_task;
@@ -97,9 +103,9 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
 
-    frame->rip = code_virt;  // Back to low addr
-    frame->cs  = 0x1B;     
-    frame->ss  = 0x23;     
+    frame->rip    = code_virt;  // Back to low addr
+    frame->cs     = 0x1B;     
+    frame->ss     = 0x23;     
     frame->rflags = 0x202; 
     
     frame->rsp = user_stack_virt + 0x1000 - 8; 
@@ -107,11 +113,11 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
 
     t->rsp = (uintptr_t)frame;
     t->is_user = true;
-    t->state = TASK_READY;
-    t->cpu_id = -1;
+    t->state   = TASK_READY;
+    t->cpu_id  = -1;
 
     spin_lock(&sched_lock_);
-    t->tid = next_tid++;
+    t->tid  = next_tid++;
     t->next = root_task->next;
     root_task->next = t;
     spin_unlock(&sched_lock_);

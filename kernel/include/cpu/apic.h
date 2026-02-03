@@ -73,13 +73,20 @@ void lapic_init(uintptr_t virt_addr);
 void lapic_init_ap();
 void lapic_write(uint32_t reg, uint32_t data);
 uint32_t lapic_read(uint32_t reg);
-void lapic_send_eoi();
 void lapic_timer_init(uint32_t ms_interval, uint8_t vector);
 void lapic_timer_calibrate();
 
 void lapic_wait_for_delivery();
 void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector);
 void lapic_broadcast_ipi(uint8_t vector);
+
+//
+// Send End-of-Interrupt signal to the LAPIC.
+// Must be called at the end of every interrupt handler.
+//
+static inline void lapic_send_eoi() {
+    lapic_write(LAPIC_EOI, 0);
+}
 
 //
 // Helper: extract ID of current CPU.

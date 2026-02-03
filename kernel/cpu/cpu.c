@@ -5,7 +5,7 @@
 #include <std_funcs.h>
 
 //
-// INIT BSP
+// INIT BSP - most important on start
 //
 void cpu_init_bsp() {
     // 1. Alloc context
@@ -29,6 +29,11 @@ void cpu_init_bsp() {
     cpu_init_context(ctx);
 }
 
+//
+// Sets up the Fast System Call (SYSCALL/SYSRET - iretq for now) mechanism for the current CPU.
+// Configures MSRs for the kernel entry point, segment selectors, and RFLAGS mask.
+// Enables the SCE (System Call Extensions) bit in the EFER register.
+//
 void cpu_init_syscalls() {
     extern void syscall_entry();
     write_msr(0xC0000082, (uintptr_t)syscall_entry); 
