@@ -17,6 +17,9 @@
 #include <sched.h>
 #include <userlib.h>
 #include <syscall.h>
+#include <ioapic.h>
+#include <i8042.h>
+#include <io.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -25,6 +28,12 @@
 int g_lock_enabled = 0;
 
 syscall_ptr_t sys_table[10] = { 0 };
+
+void pic_disable() {
+    outb(0x21, 0xFF);
+    outb(0xA1, 0xFF);
+    kprint("Legacy PIC disabled.\n");
+}
 
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
@@ -176,6 +185,11 @@ void kernel_main_high(BootInfo *bi) {
             lapic_timer_calibrate();
             lapic_timer_init(10, 32);
 
+            pic_disable();
+            ioapic_init(0xFEC00000); 
+            ioapic_set_irq(1, 0, 33);
+            i8042_init();
+
             sched_init();
 
             kprint("Starting SMP initialization...\n");
@@ -195,13 +209,13 @@ void kernel_main_high(BootInfo *bi) {
 
             kprint("Testing Ring 3 jump...\n");
 
-            arch_task_create_user(user_test_task);
-            arch_task_create_user(user_test_task_3);
-            arch_task_create_user(user_test_task_2);
+            // arch_task_create_user(user_test_task);
+            // arch_task_create_user(user_test_task_3);
+            // arch_task_create_user(user_test_task_2);
         }
     }
 
-    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x1000);
+    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x20000000);
     kprint("Kernel isolated.\n");
 
     __asm__ volatile("sti");

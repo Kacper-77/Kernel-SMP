@@ -25,7 +25,8 @@
 #define I8042_CMD_DISABLE_P2   0xA7
 #define I8042_CMD_ENABLE_P2    0xA8
 
-// HELPERS - !!! can change !!!
+// HELPERS
+void i8042_init();
 void i8042_wait_write();
 void i8042_wait_read();
 void i8042_write_command(uint8_t cmd);

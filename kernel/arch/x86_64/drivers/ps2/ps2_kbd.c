@@ -1,4 +1,5 @@
 #include <ps2_kbd.h>
+#include <io.h>
 #include <i8042.h>
 #include <serial.h>
 

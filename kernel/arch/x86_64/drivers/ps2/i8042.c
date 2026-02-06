@@ -86,6 +86,15 @@ void i8042_init() {
 
     // 5. Enable keyboard port
     i8042_write_command(I8042_CMD_ENABLE_P1);
+
+    // 6. Tell the keyboard to start sending scancodes (Enable Scanning)
+    i8042_wait_write();
+    outb(PS2_DATA_PORT, 0xF4);
+
+    // 7. Final Flush
+    while (inb(PS2_STATUS_REG) & PS2_STATUS_OUTPUT_FULL) {
+        inb(PS2_DATA_PORT);
+    }
     
     kprint("i8042: Controller ready.\n");
 }

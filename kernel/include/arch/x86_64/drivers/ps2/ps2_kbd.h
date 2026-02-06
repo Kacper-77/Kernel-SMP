@@ -54,4 +54,6 @@ static const uint8_t scancode_set2_upper[] = {
     0,   '=', '3', '-', '*', '9', 0,   0
 };
 
+void ps2_keyboard_handler();
+
 #endif

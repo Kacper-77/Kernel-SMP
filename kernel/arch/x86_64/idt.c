@@ -6,6 +6,7 @@
 #include <panic.h>
 #include <sched.h>
 #include <spinlock.h>
+#include <ps2_kbd.h>
 
 static struct idt_ptr idtr;
 static struct idt_entry idt[256];
@@ -53,6 +54,9 @@ uint64_t interrupt_dispatch(interrupt_frame_t* frame) {
 
         lapic_send_eoi();
         next_rsp = schedule(frame);
+    } else if (frame->vector_number == 33) {
+        ps2_keyboard_handler();
+        lapic_send_eoi();
     } else if (frame->vector_number == IPI_VECTOR_TEST) {
         extern spinlock_t kprint_lock_;
         spin_lock(&kprint_lock_);

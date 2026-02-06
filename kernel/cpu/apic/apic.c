@@ -25,17 +25,24 @@ uint32_t lapic_read(uint32_t reg) {
 void lapic_init(uintptr_t virt_addr) {
     lapic_base = (uint32_t*)virt_addr;
 
-    // 1. Clear Error Status Register
+    // 1. ESR
     lapic_write(LAPIC_ESR, 0);
     lapic_write(LAPIC_ESR, 0);
 
-    // 2. Enable the Local APIC
+    // 2. SVR (Spurious Interrupt Vector Register)
     lapic_write(LAPIC_SVR, lapic_read(LAPIC_SVR) | LAPIC_SVR_ENABLE | 0xFF);
 
-    // 3. Set Task Priority Register to 0
+    // 3. LVT
+    lapic_write(LAPIC_LVT_LINT0, 0x10000);
+    lapic_write(LAPIC_LVT_LINT1, 0x10000);
+
+    // 4. LVT Error
+    lapic_write(LAPIC_LVT_ERROR, 34);
+
+    // 5. TPR (Task Priority Register)
     lapic_write(LAPIC_TPR, 0);
 
-    // 4. EOI (End of Interrupt)
+    // 6. EOI
     lapic_write(LAPIC_EOI, 0);
 }
 
