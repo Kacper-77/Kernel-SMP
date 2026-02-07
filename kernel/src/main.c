@@ -52,15 +52,15 @@ static void user_test_task() {
     }
 }
 
+__attribute__((aligned(4096)))
 static void user_test_task_2() {
-    char msg[] = "Task 2 is spinning...\n";
-    char msg2[] = "Task 2 is done. Requesting exit...\n";
+    char msg[] = {'T', 'a', 's', 'k', ' ', '2', '\n', 0};
+    char msg2[] = {'D', 'o', 'n', 'e', '\n', 0};
     
     volatile uint64_t counter = 0;
     while(counter < 5) {
         u_print(msg);
-        
-        u_sleep(2000);
+        u_sleep(10);
         counter++;
     }
 
@@ -68,18 +68,22 @@ static void user_test_task_2() {
     u_exit();
 }
 
-__attribute__((naked)) static void user_test_task_3() {
-    __asm__ volatile (
-        ".code64\n"
-        "mov $1, %%rax\n"          
-        "lea 1f(%%rip), %%rdi\n"  
-        "syscall\n"
-        "mov $2, %%rax\n"          
-        "syscall\n"
-        "1: .asciz \"Hi from Ring 3!\\n\" \n"
-        : : : "rax", "rdi", "rcx", "r11"
-    );
-    // __asm__ volatile("hlt");
+
+static void user_test_task_echo() {
+    u_print("\nWelcome to Shell!\n");
+
+    while(1) {
+        char c = u_read_kbd();
+        
+        if (c != 0) {
+            char buf[2] = {c, 0};
+            u_print(buf);
+
+            if (c == '\r') u_print("\n");
+        } else {
+            u_sleep(10);
+        }
+    }
 }
 
 static void task_a() {
@@ -206,17 +210,15 @@ void kernel_main_high(BootInfo *bi) {
             // panic("End of boot test - halting system.");
 
             kmalloc_dump();
-
-            kprint("Testing Ring 3 jump...\n");
-
-            // arch_task_create_user(user_test_task);
-            // arch_task_create_user(user_test_task_3);
-            // arch_task_create_user(user_test_task_2);
         }
     }
 
-    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x20000000);
+    vmm_unmap_range(vmm_get_pml4(), 0x0, 0x100000); // UEFI/BIOS area
+    vmm_unmap_range(vmm_get_pml4(), KERNEL_PHYS_BASE, 0x400000); // Kernel identity
     kprint("Kernel isolated.\n");
+
+    arch_task_create_user(user_test_task);
+    //arch_task_create_user(user_test_task_2);
 
     __asm__ volatile("sti");
 
@@ -230,11 +232,12 @@ void kernel_main_high(BootInfo *bi) {
     }
     arch_task_create(task_a);
     arch_task_create(task_b);
-    kprint("Scheduler started!\n");
 
     kprint("Timer TEST PASSED! Uptime: ");
     kprint_hex(get_uptime_ms());
     kprint(" ms\n");
+
+    arch_task_create_user(user_test_task_echo);
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
     while(1) {

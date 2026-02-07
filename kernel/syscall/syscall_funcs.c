@@ -2,6 +2,7 @@
 #include <sched.h>
 #include <timer.h>
 #include <serial.h>
+#include <ps2_kbd.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -75,6 +76,11 @@ uint64_t sys_sleep_handler(interrupt_frame_t* frame) {
     return (uint64_t)schedule(frame);
 }
 
+uint64_t sys_read_kbd_handler(interrupt_frame_t* frame) {
+    (void)frame;
+    return (uint64_t)kbd_pop_char();
+}
+
 //
 // INIT SYS TABLE
 //
@@ -83,4 +89,5 @@ void init_sys_table() {
     sys_table[SYS_EXIT]       = sys_exit_handler;
     sys_table[SYS_GET_UPTIME] = sys_get_uptime_handler;
     sys_table[SYS_SLEEP]      = sys_sleep_handler;
+    sys_table[SYS_KBD_PS2]    = sys_read_kbd_handler;
 }

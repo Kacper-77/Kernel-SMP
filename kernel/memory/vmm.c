@@ -4,10 +4,6 @@
 #include <std_funcs.h>
 #include <efi_descriptor.h>
 
-// Physical address where the kernel is loaded
-#define KERNEL_PHYS_BASE 0x2000000
-// Virtual address where the kernel starts
-#define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
 // Default addr mask
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
 
@@ -211,11 +207,10 @@ void vmm_init(BootInfo* bi) {
     page_table_t* local_pml4 = (page_table_t*)pmm_alloc_frame();
     memset(local_pml4, 0, PAGE_SIZE);
 
-    // 1. BOOTSTRAP IDENTITY MAPPING (First 512 MiB)
+    // 1. BOOTSTRAP IDENTITY MAPPING (First 32 MB + 4 MB for Bootstrap)
     // Necessary to keep the current execution flow alive when CR3 is swapped.
     // Maps physical 0x0 -> virtual 0x0.
-    // NOTE: will be changed
-    for (uint64_t addr = 0; addr < 0x20000000; addr += PAGE_SIZE) {
+    for (uint64_t addr = 0; addr < (KERNEL_PHYS_BASE + 0x400000); addr += PAGE_SIZE) {
         vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
@@ -263,8 +258,9 @@ void vmm_init(BootInfo* bi) {
 
     for (int i = 0; i < stack_pages; i++) {
         uintptr_t phys_addr = stack_page - (i * PAGE_SIZE);
-        uintptr_t virt_addr = phys_to_virt(phys_addr);
-        vmm_map(local_pml4, virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
+        vmm_map(local_pml4, phys_to_virt(phys_addr), phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
+        // IDENTITY MAP
+        vmm_map(local_pml4, phys_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
     }
 
     // 5. MAP THE FRAMEBUFFER

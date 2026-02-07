@@ -55,5 +55,7 @@ static const uint8_t scancode_set2_upper[] = {
 };
 
 void ps2_keyboard_handler();
+void kbd_push_char(char c);
+char kbd_pop_char();
 
 #endif

@@ -1,5 +1,6 @@
 #include <syscall.h>
 #include <serial.h>
+#include <ps2_kbd.h>
 
 #include <stddef.h>
 

@@ -8,6 +8,11 @@
 
 #define PAGE_SIZE 4096
 
+// Physical address where the kernel is loaded
+#define KERNEL_PHYS_BASE 0x2000000
+// Virtual address where the kernel starts
+#define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
+
 // Page Table Entry Flags
 #define PTE_PRESENT     (1ULL << 0)  // Page is in memory
 #define PTE_WRITABLE    (1ULL << 1)  // Page can be written to

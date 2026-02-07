@@ -26,7 +26,7 @@ static void ap_test_task() {
     int x = 0;
     while(x < 10) {
         kprint("?");
-        msleep(100);
+        msleep(10);
         x++;
     }
     task_exit();
@@ -36,7 +36,7 @@ static void ap_test_task2() {
     int x = 0;
     while(x < 10) {
         kprint("!");
-        msleep(100);
+        msleep(10);
         x++;
     }
     task_exit();
@@ -47,7 +47,7 @@ static void user_test_task_ap() {
     char msg[] = "RING 3 AP AP AP AP AP\n";
     while(counter < 5) {
         u_print(msg);
-        u_sleep(1000);
+        u_sleep(10);
         counter++;
     }
     u_exit();

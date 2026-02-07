@@ -15,6 +15,7 @@ set(CMAKE_C_FLAGS "-target x86_64-unknown-elf -ffreestanding -mcmodel=kernel -mn
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/cpu)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/smp)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/syscall)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/cpu/apic)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/utils)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/sched)
@@ -31,6 +32,8 @@ file(GLOB KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/cpu/apic/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/memory/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/sched/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/syscall/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/syscall/*.asm"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/sched/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/drivers/*.c"
