@@ -77,6 +77,8 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+    } else if (flags & PTE_USER) {
+        pml4->entries[pml4_i] |= PTE_USER;
     }
     page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
@@ -85,6 +87,8 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+    } else if (flags & PTE_USER) {
+        pdpt->entries[pdpt_i] |= PTE_USER;
     }
     page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
@@ -93,6 +97,8 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+    } else if (flags & PTE_USER) {
+        pd->entries[pd_i] |= PTE_USER;
     }
     page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
 

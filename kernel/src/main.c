@@ -52,7 +52,6 @@ static void user_test_task() {
     }
 }
 
-__attribute__((aligned(4096)))
 static void user_test_task_2() {
     char msg[] = {'T', 'a', 's', 'k', ' ', '2', '\n', 0};
     char msg2[] = {'D', 'o', 'n', 'e', '\n', 0};
@@ -63,26 +62,22 @@ static void user_test_task_2() {
         u_sleep(10);
         counter++;
     }
-
     u_print(msg2);
     u_exit();
 }
 
 
 static void user_test_task_echo() {
-    u_print("\nWelcome to Shell!\n");
+    char msg[] = {'S','H','E','L','L','\n',0};
+    u_print(msg);
 
     while(1) {
         char c = u_read_kbd();
-        
         if (c != 0) {
             char buf[2] = {c, 0};
             u_print(buf);
-
-            if (c == '\r') u_print("\n");
-        } else {
-            u_sleep(10);
         }
+        u_sleep(50);
     }
 }
 
@@ -201,24 +196,25 @@ void kernel_main_high(BootInfo *bi) {
 
             if (get_cpu_count_test() > 1) {
                 kprint("BSP: IPI_TEST CPU 1...\n");
-                lapic_send_ipi(1, IPI_VECTOR_TEST); 
+               lapic_send_ipi(1, IPI_VECTOR_TEST); 
             }
 
             kprint("BSP: Broadcasting IPI...\n");
             lapic_broadcast_ipi(IPI_VECTOR_TEST);
 
-            // panic("End of boot test - halting system.");
+            //panic("End of boot test - halting system.");
 
             kmalloc_dump();
         }
     }
-
+    
     vmm_unmap_range(vmm_get_pml4(), 0x0, 0x100000); // UEFI/BIOS area
     vmm_unmap_range(vmm_get_pml4(), KERNEL_PHYS_BASE, 0x400000); // Kernel identity
     kprint("Kernel isolated.\n");
 
     arch_task_create_user(user_test_task);
-    //arch_task_create_user(user_test_task_2);
+    arch_task_create_user(user_test_task_2);
+    arch_task_create_user(user_test_task_echo);
 
     __asm__ volatile("sti");
 
@@ -236,8 +232,6 @@ void kernel_main_high(BootInfo *bi) {
     kprint("Timer TEST PASSED! Uptime: ");
     kprint_hex(get_uptime_ms());
     kprint(" ms\n");
-
-    arch_task_create_user(user_test_task_echo);
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
     while(1) {

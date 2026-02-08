@@ -5,7 +5,7 @@
 #include <std_funcs.h>
 
 //
-// INIT BSP - most important on start
+// INIT BSP - most important at start
 //
 void cpu_init_bsp() {
     // 1. Alloc context

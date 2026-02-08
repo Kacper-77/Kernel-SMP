@@ -59,7 +59,7 @@ uint64_t sys_exit_handler(interrupt_frame_t* frame) {
     (void)frame;
     task_exit();
 
-    return 0;
+    return (uint64_t)schedule(frame);
 }
 
 uint64_t sys_get_uptime_handler(interrupt_frame_t* frame) {
