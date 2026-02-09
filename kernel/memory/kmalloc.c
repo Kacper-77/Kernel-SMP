@@ -8,7 +8,7 @@
 #define KMALLOC_MAGIC 0xCAFEBABE
 #define HEAP_MIN_BLOCK_SIZE 16
 
-static spinlock_t heap_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
+static spinlock_t heap_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 static m_header_t* heap_start = NULL;
 
 //
@@ -32,22 +32,24 @@ static void kpanic(const char* message) {
 void kmalloc_dump() {
     extern spinlock_t kprint_lock_;
 
+    uint64_t f = spin_irq_save();
     spin_lock(&kprint_lock_);
     spin_lock(&heap_lock_); 
 
-    kprint("\n--- DUMP START ---\n");
+    kprint_raw("\n--- DUMP START ---\n");
     m_header_t* curr = heap_start;
     while (curr) {
-        kprint("Block: "); kprint_hex((uintptr_t)curr);
-        kprint(" | Size: "); kprint_hex(curr->size);
-        kprint(" | Free: "); kprint(curr->is_free ? "YES" : "NO");
-        kprint("\n");
+        kprint_raw("Block: ");   kprint_hex_raw((uintptr_t)curr);
+        kprint_raw(" | Size: "); kprint_hex_raw(curr->size);
+        kprint_raw(" | Free: "); kprint_raw(curr->is_free ? "YES" : "NO");
+        kprint_raw("\n");
         curr = curr->next;
     }
-    kprint("--- DUMP END ---\n");
+    kprint_raw("--- DUMP END ---\n");
 
     spin_unlock(&heap_lock_);
     spin_unlock(&kprint_lock_);
+    spin_irq_restore(f);
 }
 
 //
@@ -56,8 +58,6 @@ void kmalloc_dump() {
 // to ensure BSP/AP synchronization during early boot.
 //
 void kmalloc_init() {
-    spin_lock(&heap_lock_);
-
     void* first_frame = pmm_alloc_frame();
     if (!first_frame) {
         kpanic("KMALLOC: Failed to allocate first frame for heap!");
@@ -73,8 +73,6 @@ void kmalloc_init() {
     heap_start->is_free = 1;
     heap_start->next = NULL;
     heap_start->prev = NULL;
-
-    spin_unlock(&heap_lock_);
 }
 
 //
@@ -87,6 +85,7 @@ void* kmalloc(size_t size) {
     if (size == 0) return NULL;
 
     size = align(size);
+    uint64_t f = spin_irq_save();
     spin_lock(&heap_lock_);
 
     m_header_t* current = heap_start;
@@ -114,6 +113,7 @@ void* kmalloc(size_t size) {
 
             void* ptr = (void*)((uintptr_t)current + sizeof(m_header_t));
             spin_unlock(&heap_lock_);
+            spin_irq_restore(f);
             
             memset(ptr, 0, current->size);
             return ptr;
@@ -123,13 +123,21 @@ void* kmalloc(size_t size) {
     }
 
     // 2. EXPANDING HEAP
+    spin_unlock(&heap_lock_);  // Unlock because PMM uses lock
+    spin_irq_restore(f);
+
     // Get new frame
     size_t required_with_header = size + sizeof(m_header_t);
     size_t num_frames = (required_with_header + 4095) / 4096;
     void* new_frames = pmm_alloc_frames(num_frames);
 
+    if (!new_frames) return NULL;
+
     uintptr_t virt_addr = phys_to_virt((uintptr_t)new_frames);
     memset((void*)virt_addr, 0, num_frames * 4096);
+
+    f = spin_irq_save();
+    spin_lock(&heap_lock_);
 
     m_header_t* new_block = (m_header_t*)virt_addr;
     new_block->magic = KMALLOC_MAGIC;
@@ -152,13 +160,15 @@ void* kmalloc(size_t size) {
     }
 
     if (last) { 
-        last->next = new_block; 
+        last->next = new_block;
     } else {
         heap_start = new_block;
         heap_start->prev = NULL;
     }
 
     spin_unlock(&heap_lock_);
+    spin_irq_restore(f);
+
     return (void*)((uintptr_t)new_block + sizeof(m_header_t));
 }
 
@@ -180,6 +190,7 @@ void kfree(void* ptr) {
     if (header->is_free)  // Additional protection
         kpanic("KMALLOC: Double free detected!");
 
+    uint64_t f = spin_irq_save();
     spin_lock(&heap_lock_);
     
     // 3. Set block as free
@@ -211,4 +222,5 @@ void kfree(void* ptr) {
     }
 
     spin_unlock(&heap_lock_);
+    spin_irq_restore(f);
 }

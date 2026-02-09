@@ -14,20 +14,16 @@ void smp_halt_others(void) {
 }
 
 void panic(const char* message) {
-    extern spinlock_t kprint_lock_;
-
-    kprint_lock_.lock = 0;
-    kprint_lock_.owner = -1;
-    
     __asm__ volatile("cli");
+
     smp_halt_others();
 
-    kprint("\n\n########################################\n");
-    kprint("###           KERNEL PANIC           ###\n");
-    kprint("########################################\n");
-    kprint("CPU ID: "); kprint_hex(get_cpu()->cpu_id);
-    kprint("\nREASON: "); kprint(message);
-    kprint("\n\nSystem halted permanently.\n");
+    kprint_raw("\n\n########################################\n");
+    kprint_raw("###           KERNEL PANIC           ###\n");
+    kprint_raw("########################################\n");
+    kprint_raw("CPU ID: "); kprint_hex_raw(get_cpu()->cpu_id);
+    kprint_raw("\nREASON: "); kprint_raw(message);
+    kprint_raw("\n\nSystem halted permanently.\n");
 
     for (;;) {
         __asm__ volatile("hlt");

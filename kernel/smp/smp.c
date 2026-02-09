@@ -16,6 +16,7 @@
 #include <test.h>
 
 BootInfo* g_bi = NULL;
+volatile int ap_can_run = 0;
 
 extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
@@ -81,7 +82,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
     lapic_init_ap();
     lapic_timer_calibrate(); 
     lapic_timer_init(10, 32);
-    sched_init_ap();    
+    sched_init_ap();   
 
     if (g_bi) {
     draw_test_squares_safe(ctx->cpu_id, 
@@ -190,21 +191,21 @@ void boot_ap(uint32_t apic_id, uint8_t vector) {
     lapic_write(LAPIC_ICR_LOW, ICR_INIT | ICR_ASSERT | ICR_LEVEL);
 
     lapic_wait_for_delivery();
-    msleep(1);
+    msleep(10);
 
     // 2. First SIPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
     lapic_wait_for_delivery();
-    msleep(1);
+    msleep(10);
 
     // 3. Second SIPI (optional but good practice)
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
     lapic_wait_for_delivery();
-    msleep(1);
+    msleep(10);
 }
 
 uint64_t get_cpu_count_test() {

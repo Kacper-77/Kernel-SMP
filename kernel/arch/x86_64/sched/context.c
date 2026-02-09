@@ -59,6 +59,7 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     __asm__ volatile("mfence" ::: "memory");
 
     // Lock scheduler to safely modify the global circular list
+    uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
     
     t->tid  = __atomic_fetch_add(&next_tid, 1, __ATOMIC_SEQ_CST);
@@ -66,6 +67,7 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     root_task->next = t;
     
     spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
 
     return t;
 }
@@ -125,11 +127,15 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
 
     __asm__ volatile("mfence" ::: "memory");
 
+    uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
+
     t->tid  = __atomic_fetch_add(&next_tid, 1, __ATOMIC_SEQ_CST);
     t->next = root_task->next;
     root_task->next = t;
+    
     spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
 
     return t;
 }

@@ -9,7 +9,7 @@
 #include <std_funcs.h>
 
 task_t* root_task = NULL;
-spinlock_t sched_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
+spinlock_t sched_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 
 //
 // The Idle Task: The ultimate fallback for the CPU when no tasks are ready.
@@ -180,11 +180,12 @@ void task_exit() {
     if (!current) return;
 
     // 2. Lock scheduler
+    uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
 
-    kprint("\n[SCHED] Task ");
+    kprint_raw("\n[SCHED] Task ");
     kprint_hex(current->tid);
-    kprint(" is now a ZOMBIE.\n");
+    kprint_raw(" is now a ZOMBIE.\n");
 
     // 3. Change state ("Reaper" can kill it later)
     current->state = TASK_ZOMBIE;
@@ -206,6 +207,7 @@ void task_exit() {
 //
 void sched_reap() {
     // 1. Lock before cleaning
+    uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
 
     // 2. Extract key data about tasks
@@ -220,9 +222,9 @@ void sched_reap() {
             task_t* to_free = current;
             current = current->next;
 
-            kprint("[REAPER] Cleaning up TID ");
+            kprint_raw("[REAPER] Cleaning up TID ");
             kprint_hex(to_free->tid);
-            kprint("\n");
+            kprint_raw("\n");
 
             kfree((void*)to_free->stack_base); 
             kfree(to_free);                    
@@ -234,6 +236,7 @@ void sched_reap() {
         current = current->next;
     }
     spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
 }
 
 task_t* sched_get_current() {

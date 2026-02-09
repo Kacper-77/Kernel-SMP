@@ -9,10 +9,7 @@
 uint8_t* bitmap = NULL;
 uint64_t bitmap_size = 0;
 
-//
-// Atomic
-//
-static spinlock_t pmm_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
+static spinlock_t pmm_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 
 //
 // Updates the physical memory bitmap by marking a specific 4KB frame as used (1).
@@ -109,6 +106,7 @@ void pmm_init(BootInfo* boot_info) {
 void* pmm_alloc_frame() {
     if (bitmap == NULL) return NULL;
     
+    uint64_t f = spin_irq_save();
     spin_lock(&pmm_lock_);
 
     // Get current CPU context
@@ -131,11 +129,15 @@ void* pmm_alloc_frame() {
                 if (cpu) cpu->pmm_last_index = i;
 
                 spin_unlock(&pmm_lock_);
+                spin_irq_restore(f);
                 return (void*)frame_addr;
             }
         }
     }
-    spin_unlock(&pmm_lock_); // Unlock even if frame wasn't found
+
+    spin_unlock(&pmm_lock_);
+    spin_irq_restore(f);
+
     return NULL; 
 }
 
@@ -147,9 +149,7 @@ void* pmm_alloc_frame() {
 void* pmm_alloc_frames(size_t count) {
     if (bitmap == NULL || count == 0) return NULL;
 
-    // Idiot proof
-    if (count == 1) return pmm_alloc_frame();
-
+    uint64_t f = spin_irq_save();
     spin_lock(&pmm_lock_);
 
     uint64_t total_bits = bitmap_size * 8;
@@ -173,18 +173,24 @@ void* pmm_alloc_frames(size_t count) {
             }
 
             uint64_t phys_addr = i * PAGE_SIZE;
+
             spin_unlock(&pmm_lock_);
+            spin_irq_restore(f);
+
             return (void*)phys_addr;
         }
     }
 
     spin_unlock(&pmm_lock_);
+    spin_irq_restore(f);
+
     return NULL;
 }
 
 void pmm_free_frame(void* frame) {
 if (!frame) return;
 
+    uint64_t f = spin_irq_save();
     spin_lock(&pmm_lock_);
 
     uint64_t addr = (uint64_t)frame;
@@ -196,7 +202,9 @@ if (!frame) return;
     if (cpu && frame_index < cpu->pmm_last_index) {
         cpu->pmm_last_index = frame_index;
     }
+
     spin_unlock(&pmm_lock_);
+    spin_irq_restore(f);
 }
 
 //

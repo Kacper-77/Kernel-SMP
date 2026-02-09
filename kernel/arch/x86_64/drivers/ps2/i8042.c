@@ -3,7 +3,7 @@
 #include <spinlock.h>
 #include <serial.h>
 
-static spinlock_t i8042_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
+static spinlock_t i8042_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 
 void i8042_wait_write() {
     for (int i = 0; i < 100000; i++) {
@@ -20,36 +20,36 @@ void i8042_wait_read() {
 }
 
 void i8042_write_command(uint8_t cmd) {
-    uint64_t f = save_interrupts_and_cli();
+    uint64_t f = spin_irq_save();
     spin_lock(&i8042_lock_);
     
     i8042_wait_write();
     outb(PS2_COMMAND_REG, cmd);
     
     spin_unlock(&i8042_lock_);
-    restore_interrupts(f);
+    spin_irq_restore(f);
 }
 
 void i8042_write_data(uint8_t data) {
-    uint64_t f = save_interrupts_and_cli();
+    uint64_t f = spin_irq_save();
     spin_lock(&i8042_lock_);
 
     i8042_wait_write();
     outb(PS2_DATA_PORT, data);
 
     spin_unlock(&i8042_lock_);
-    restore_interrupts(f);
+    spin_irq_restore(f);
 }
 
 uint8_t i8042_read_data() {
-    uint64_t f = save_interrupts_and_cli();
+    uint64_t f = spin_irq_save();
     spin_lock(&i8042_lock_);
     
     i8042_wait_read();
     uint8_t data = inb(PS2_DATA_PORT);
     
     spin_unlock(&i8042_lock_);
-    restore_interrupts(f);
+    spin_irq_restore(f);
     return data;
 }
 

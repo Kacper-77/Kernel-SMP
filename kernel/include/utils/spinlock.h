@@ -2,80 +2,49 @@
 #define SPINLOCK_H
 
 #include <apic.h>
-#include <panic.h>
+#include <cpu.h>
+
+#include <stdint.h>
 
 extern int g_lock_enabled;
 
-// NOTE FOR ME
-// Spinlock must be light
-// Mutexes and semaphores are crucial
-
 typedef struct {
-    volatile int lock;
-    volatile int owner;     // ID (-1 is none)
-    volatile int recursion;
+    volatile uint32_t ticket;
+    volatile uint32_t current;
+    int last_cpu;
 } __attribute__((aligned(64))) spinlock_t;
 
-static inline uint64_t save_interrupts_and_cli() {
+static inline uint64_t spin_irq_save() {
     uint64_t rflags;
-    __asm__ volatile(
-        "pushfq\n\t"
-        "pop %0\n\t"
-        "cli"
-        : "=rm"(rflags)
-        :
-        : "memory"
-    );
+    __asm__ volatile("pushfq; pop %0; cli" : "=rm"(rflags) :: "memory");
     return rflags;
 }
 
-static inline void restore_interrupts(uint64_t rflags) {
-    __asm__ volatile(
-        "push %0\n\t"
-        "popfq"
-        :
-        : "rm"(rflags)
-        : "memory"
-    );
+static inline void spin_irq_restore(uint64_t rflags) {
+    __asm__ volatile("push %0; popfq" :: "rm"(rflags) : "memory");
 }
 
-static inline void spin_lock(spinlock_t* target) {
+static inline void spin_lock(spinlock_t* lock) {
     if (!g_lock_enabled) return;
-    
-    int cpu_id = get_current_cpu_id();
 
-    if (target->owner == cpu_id) {
-        target->recursion++;
-        return;
+    // Get ticket by atomic increment
+    uint32_t my_ticket = __atomic_fetch_add(&lock->ticket, 1, __ATOMIC_RELAXED);
+
+    // Wait for current == ticket
+    while (__atomic_load_n(&lock->current, __ATOMIC_ACQUIRE) != my_ticket) {
+        __asm__ volatile("pause");
     }
 
-    while (__sync_lock_test_and_set(&(target->lock), 1)) {
-        while (target->lock) {
-            __asm__ volatile("pause");
-        }
-    }
-
-    __sync_synchronize();
-    target->owner = cpu_id;
-    target->recursion = 1; 
+    lock->last_cpu = get_current_cpu_id();
 }
 
-static inline void spin_unlock(spinlock_t* target) {
+static inline void spin_unlock(spinlock_t* lock) {
     if (!g_lock_enabled) return;
 
-    int cpu_id = get_current_cpu_id();
-    
-    if (target->owner != cpu_id) {
-        panic("spin_unlock: CPU tried to unlock foreign spinlock");
-    }
+    lock->last_cpu = -1;
 
-    target->recursion--;
-
-    if (target->recursion == 0) {
-        target->owner = -1;
-        __sync_synchronize();
-        __sync_lock_release(&(target->lock));
-    }
+    uint32_t next = lock->current + 1;
+    __atomic_store_n(&lock->current, next, __ATOMIC_RELEASE);
 }
 
 #endif

@@ -9,6 +9,8 @@
 
 #define HHDM_OFFSET 0xFFFF800000000000
 
+static spinlock_t vmm_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
+
 page_table_t* kernel_pml4 = NULL;
 static uintptr_t kernel_pml4_phys = 0;
 
@@ -18,9 +20,6 @@ extern uint8_t _kernel_end[];
 extern uint8_t _text_start[], _text_end[];
 extern uint8_t _rodata_start[], _rodata_end[];
 extern uint8_t _data_start[], _data_end[];
-
-// Atomic
-static spinlock_t vmm_lock_ = { .lock = 0, .owner = -1, .recursion = 0 };
 
 //
 // Configures the Page Attribute Table (PAT) MSR to define 
@@ -61,11 +60,9 @@ uintptr_t vmm_create_user_pml4() {
 }
 
 //
-// Maps a virtual page to a physical frame.
-// If intermediate tables don't exist, they are allocated using PMM.
+// Unlocked mapping
 //
-void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
-    spin_lock(&vmm_lock_);
+static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
 
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -103,12 +100,34 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
 
     pt->entries[pt_i] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
-
-    spin_unlock(&vmm_lock_);
+    
+    vmm_invlpg((void*)virt);
 }
 
-// 2MB
+static void _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
+    uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    for (uint64_t i = 0; i < num_pages; i++) {
+        _vmm_map_unlocked(pml4, virt + (i * PAGE_SIZE), phys + (i * PAGE_SIZE), flags);
+    }
+}
+
+//
+// Maps a virtual page to a physical frame.
+// If intermediate tables don't exist, they are allocated using PMM.
+//
+void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
+    uint64_t f = spin_irq_save();
+    spin_lock(&vmm_lock_);
+
+    _vmm_map_unlocked(pml4, virt, phys, flags);
+
+    spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
+}
+
+// 2MB - !!! WILL BE CHANGED !!!
 void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
+    uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
 
     uint64_t pml4_i = PML4_IDX(virt);
@@ -131,7 +150,10 @@ void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t f
 
     pd->entries[pd_i] = (phys & VMM_ADDR_MASK) | flags | 0x81; // 0x81 = Present + Huge Page
 
+    vmm_invlpg((void*)virt);  // Local flush
+
     spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
 }
 
 //
@@ -188,17 +210,13 @@ uintptr_t phys_to_virt(uintptr_t phys) {
 // Automatically handles TLB invalidation for the entire range.
 //
 void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
-    uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-    
+    uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
-    for (uint64_t i = 0; i < num_pages; i++) {
-        uintptr_t v_addr = virt + (i * PAGE_SIZE);
-        uintptr_t p_addr = phys + (i * PAGE_SIZE);
-        
-        vmm_map(pml4, v_addr, p_addr, flags); 
-        vmm_invlpg((void*)v_addr);
-    }
+
+    _vmm_map_range_unlocked(pml4, virt, phys, size, flags);
+
     spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
 }
 
 //
@@ -217,7 +235,7 @@ void vmm_init(BootInfo* bi) {
     // Necessary to keep the current execution flow alive when CR3 is swapped.
     // Maps physical 0x0 -> virtual 0x0.
     for (uint64_t addr = 0; addr < (KERNEL_PHYS_BASE + 0x400000); addr += PAGE_SIZE) {
-        vmm_map(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
+        _vmm_map_unlocked(local_pml4, addr, addr, PTE_PRESENT | PTE_WRITABLE);
     }
 
     // 2.  DIRECT PHYSICAL MAPPING (HHDM)
@@ -232,27 +250,24 @@ void vmm_init(BootInfo* bi) {
             uint64_t phys_start = desc->physical_start;
             uint64_t size = desc->num_pages * 4096;
 
-            vmm_map_range(local_pml4, phys_start + HHDM_OFFSET, phys_start, size, PTE_PRESENT | PTE_WRITABLE);
+            _vmm_map_range_unlocked(local_pml4, phys_start + HHDM_OFFSET, phys_start, size, PTE_PRESENT | PTE_WRITABLE);
         }
     }
 
     // 3. HIGHER HALF KERNEL MAPPING
     uintptr_t text_phys = KERNEL_PHYS_BASE + ((uintptr_t)_text_start - KERNEL_VIRT_BASE);
     size_t text_size = (size_t)(_text_end - _text_start);
-    vmm_map_range(local_pml4, (uintptr_t)_text_start, text_phys, text_size, 
-                PTE_PRESENT);
+    _vmm_map_range_unlocked(local_pml4, (uintptr_t)_text_start, text_phys, text_size, PTE_PRESENT);
 
     // 3.1 Read-Only Data (.rodata)
     uintptr_t rodata_phys = KERNEL_PHYS_BASE + ((uintptr_t)_rodata_start - KERNEL_VIRT_BASE);
     size_t rodata_size = (size_t)(_rodata_end - _rodata_start);
-    vmm_map_range(local_pml4, (uintptr_t)_rodata_start, rodata_phys, rodata_size, 
-                PTE_PRESENT | PTE_NX);
+    _vmm_map_range_unlocked(local_pml4, (uintptr_t)_rodata_start, rodata_phys, rodata_size, PTE_PRESENT | PTE_NX);
 
     // 3.2 (.data / .bss)
     uintptr_t data_phys = KERNEL_PHYS_BASE + ((uintptr_t)_data_start - KERNEL_VIRT_BASE);
     size_t data_size = (size_t)(_data_end - _data_start);
-    vmm_map_range(local_pml4, (uintptr_t)_data_start, data_phys, data_size, 
-                PTE_PRESENT | PTE_WRITABLE | PTE_NX);
+    _vmm_map_range_unlocked(local_pml4, (uintptr_t)_data_start, data_phys, data_size, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
 
 
     // 4. MAP THE STACK
@@ -264,9 +279,8 @@ void vmm_init(BootInfo* bi) {
 
     for (int i = 0; i < stack_pages; i++) {
         uintptr_t phys_addr = stack_page - (i * PAGE_SIZE);
-        vmm_map(local_pml4, phys_to_virt(phys_addr), phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
-        // IDENTITY MAP
-        vmm_map(local_pml4, phys_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
+        _vmm_map_unlocked(local_pml4, phys_to_virt(phys_addr), phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
+        _vmm_map_unlocked(local_pml4, phys_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX);
     }
 
     // 5. MAP THE FRAMEBUFFER
@@ -280,13 +294,7 @@ void vmm_init(BootInfo* bi) {
     // Ensure the BootInfo structure is accessible after the address space switch
     uintptr_t bi_phys = (uintptr_t)bi;
     uintptr_t bi_virt = phys_to_virt((uintptr_t)bi);
-    vmm_map_range(
-        local_pml4, 
-        PAGE_ALIGN_DOWN(bi_virt), 
-        PAGE_ALIGN_DOWN(bi_phys), 
-        sizeof(BootInfo), 
-        PTE_PRESENT
-    );
+    _vmm_map_range_unlocked(local_pml4, PAGE_ALIGN_DOWN(bi_virt), PAGE_ALIGN_DOWN(bi_phys), sizeof(BootInfo), PTE_PRESENT);
 
     kernel_pml4_phys = (uintptr_t)local_pml4;
 
@@ -333,6 +341,7 @@ void vmm_init(BootInfo* bi) {
 // Cleanig Identity-Mapping
 //
 void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
+    uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
 
     uint64_t pml4_i = PML4_IDX(virt);
@@ -354,6 +363,7 @@ void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
 
 done:
     spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
 }
 
 void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {

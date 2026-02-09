@@ -84,10 +84,6 @@ void lapic_timer_calibrate() {
     cpu->lapic_ticks_per_ms = global_ticks_per_ms;
 
     lapic_write(LAPIC_TICR, 0);
-
-    kprint("CPU "); kprint_hex(cpu->cpu_id);
-    kprint(" used global calibration: "); kprint_hex(cpu->lapic_ticks_per_ms);
-    kprint(" ticks/ms\n");
 }
 
 //
