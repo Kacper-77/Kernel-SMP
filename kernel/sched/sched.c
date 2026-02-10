@@ -92,6 +92,7 @@ void sched_init() {
 // 4. Updates TSS for the next interrupt/syscall and performs a CR3 switch if necessary.
 //
 uint64_t schedule(interrupt_frame_t* frame) {
+    uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
     
     cpu_context_t* cpu = get_cpu();
@@ -154,6 +155,8 @@ uint64_t schedule(interrupt_frame_t* frame) {
     }
 
     spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
+    
     return scheduled_next->rsp;  // Return stack pointer for context switch
 }
 
