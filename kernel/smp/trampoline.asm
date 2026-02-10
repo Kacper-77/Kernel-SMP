@@ -3,7 +3,6 @@
 section .rodata
 global trampoline_start
 global trampoline_end
-global jump_to_user
 
 trampoline_start:
 [bits 16]

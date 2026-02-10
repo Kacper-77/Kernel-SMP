@@ -3,6 +3,7 @@
 #include <timer.h>
 #include <serial.h>
 #include <ps2_kbd.h>
+#include <cpu.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -48,11 +49,25 @@ static uint64_t sys_kprint(const char* str) {
     return 0;
 }
 
+static uint64_t sys_kprint_hex(uint64_t value) {
+    kprint_hex(value);
+    return 0;
+}
+
 //
 // FUNCS WRAPPERS
 //
 uint64_t sys_kprint_handler(interrupt_frame_t* frame) {
     return sys_kprint((const char*)frame->rdi);
+}
+
+uint64_t sys_kprint_hex_handler(interrupt_frame_t* frame) {
+    return sys_kprint_hex((uint64_t)frame->rdi);
+}
+
+uint64_t sys_get_cpuid_handler(interrupt_frame_t* frame) {
+    (void)frame;
+    return get_cpu()->cpu_id;
 }
 
 uint64_t sys_exit_handler(interrupt_frame_t* frame) {
@@ -90,4 +105,6 @@ void init_sys_table() {
     sys_table[SYS_GET_UPTIME] = sys_get_uptime_handler;
     sys_table[SYS_SLEEP]      = sys_sleep_handler;
     sys_table[SYS_KBD_PS2]    = sys_read_kbd_handler;
+    sys_table[SYS_KPRINT_HEX] = sys_kprint_hex_handler;
+    sys_table[SYS_CPU_ID]     = sys_get_cpuid_handler;
 }

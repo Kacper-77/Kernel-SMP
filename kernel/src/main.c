@@ -29,12 +29,6 @@ int g_lock_enabled = 0;
 
 syscall_ptr_t sys_table[10] = { 0 };
 
-void pic_disable() {
-    outb(0x21, 0xFF);
-    outb(0xA1, 0xFF);
-    kprint("Legacy PIC disabled.\n");
-}
-
 // Forward declaration
 void kernel_main_high(BootInfo *bi);
 
@@ -53,8 +47,8 @@ static void user_test_task() {
 }
 
 static void user_test_task_2() {
-    char msg[] = {'T', 'a', 's', 'k', ' ', '2', '\n', 0};
-    char msg2[] = {'D', 'o', 'n', 'e', '\n', 0};
+    char msg[] = {'T', 'a', 's', 'k', ' ', '2', '\n'};
+    char msg2[] = {'D', 'o', 'n', 'e', '\n'};
     
     volatile uint64_t counter = 0;
     while(counter < 5) {
@@ -184,7 +178,6 @@ void kernel_main_high(BootInfo *bi) {
             lapic_timer_calibrate();
             lapic_timer_init(10, 32);
 
-            pic_disable();
             ioapic_init(0xFEC00000); 
             ioapic_set_irq(1, 0, 33);
             i8042_init();
@@ -226,8 +219,8 @@ void kernel_main_high(BootInfo *bi) {
         kprint_hex(i);
         kprint("s...\n");
     }
-    arch_task_create(task_a);
-    arch_task_create(task_b);
+    // arch_task_create(task_a);
+    // arch_task_create(task_b);
 
     kprint("Timer TEST PASSED! Uptime: ");
     kprint_hex(get_uptime_ms());

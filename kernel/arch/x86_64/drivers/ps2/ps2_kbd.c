@@ -23,6 +23,7 @@ static volatile int kbd_tail = 0;
 // by passed scancodes
 //
 void ps2_keyboard_handler() {
+    uint64_t f = spin_irq_save();
     spin_lock(&kbd_lock_);
     
     uint8_t scancode = inb(PS2_DATA_PORT);
@@ -51,6 +52,7 @@ void ps2_keyboard_handler() {
     }
 
     spin_unlock(&kbd_lock_);
+    spin_irq_restore(f);
 }
 
 //

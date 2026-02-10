@@ -16,7 +16,6 @@
 #include <test.h>
 
 BootInfo* g_bi = NULL;
-volatile int ap_can_run = 0;
 
 extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
@@ -45,7 +44,7 @@ static void ap_test_task2() {
 
 static void user_test_task_ap() {
     volatile int counter = 0;
-    char msg[] = "RING 3 AP AP AP AP AP\n";
+    char msg[] = "\nRING 3 AP AP AP AP AP\n";
     while(counter < 5) {
         u_print(msg);
         u_sleep(10);
@@ -95,15 +94,13 @@ void kernel_main_ap(cpu_context_t* ctx) {
     if (ap_message) {
         strcpy(ap_message, "CPU ");
         ap_message[4] = (char)(ctx->cpu_id + '0'); 
-        strcpy(ap_message + 5, " ALLOCATED OK ");
+        strcpy(ap_message + 5, " ALLOCATED OK\n");
         kprint(ap_message);
     }
     kfree((void*)ap_message);
-    
-    kprint("AP "); kprint_hex(ctx->cpu_id); kprint(" is alive!\n");
 
-    arch_task_create(ap_test_task);
-    arch_task_create(ap_test_task2);
+    // arch_task_create(ap_test_task);
+    // arch_task_create(ap_test_task2);
     arch_task_create_user(user_test_task_ap);
 
     __asm__ volatile("sti");
@@ -142,9 +139,9 @@ void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
 
     // Data for trampoline
     config->trampoline_stack = ctx->kernel_stack;
-    config->trampoline_pml4 = (uintptr_t)vmm_get_pml4_phys();
+    config->trampoline_pml4  = (uintptr_t)vmm_get_pml4_phys();
     config->trampoline_entry = (uintptr_t)kernel_main_ap;
-    config->cpu_context_p = (uintptr_t)ctx;
+    config->cpu_context_p    = (uintptr_t)ctx;
     config->trampoline_ready = 0;
 
     __asm__ volatile("mfence" ::: "memory");
@@ -191,21 +188,21 @@ void boot_ap(uint32_t apic_id, uint8_t vector) {
     lapic_write(LAPIC_ICR_LOW, ICR_INIT | ICR_ASSERT | ICR_LEVEL);
 
     lapic_wait_for_delivery();
-    msleep(10);
+    msleep(1);
 
     // 2. First SIPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
     lapic_wait_for_delivery();
-    msleep(10);
+    msleep(1);
 
-    // 3. Second SIPI (optional but good practice)
+    // 3. Second SIPI
     lapic_write(LAPIC_ICR_HIGH, apic_id << 24);
     lapic_write(LAPIC_ICR_LOW, ICR_STARTUP | vector);
 
     lapic_wait_for_delivery();
-    msleep(10);
+    msleep(1);
 }
 
 uint64_t get_cpu_count_test() {

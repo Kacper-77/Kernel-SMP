@@ -32,7 +32,7 @@ void exception_handler(interrupt_frame_t* frame) {
     kprint("\nStack at: ");    kprint_hex(frame->rsp);
     kprint("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     
-    panic("Unhandled CPU Exception");
+    panic("Unhandled CPU Exception");  // !!! WILL BE CHANGED !!!
 }
 
 void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {

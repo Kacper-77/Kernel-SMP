@@ -180,11 +180,11 @@ void task_exit() {
     if (!current) return;
 
     // 2. Lock scheduler
-    uint64_t f = spin_irq_save();
+    uint64_t f __attribute__((unused)) = spin_irq_save();
     spin_lock(&sched_lock_);
 
     kprint_raw("\n[SCHED] Task ");
-    kprint_hex(current->tid);
+    kprint_hex_raw(current->tid);
     kprint_raw(" is now a ZOMBIE.\n");
 
     // 3. Change state ("Reaper" can kill it later)
@@ -223,7 +223,7 @@ void sched_reap() {
             current = current->next;
 
             kprint_raw("[REAPER] Cleaning up TID ");
-            kprint_hex(to_free->tid);
+            kprint_hex_raw(to_free->tid);
             kprint_raw("\n");
 
             kfree((void*)to_free->stack_base); 

@@ -20,5 +20,7 @@
 #define u_get_uptime()  syscall_3(3, 0, 0, 0)
 #define u_sleep(ms)     syscall_3(4, ms, 0, 0)
 #define u_read_kbd()    ((char)syscall_3(6, 0, 0, 0))
+#define u_kprint_hex(val)  syscall_3(7, val, 0, 0)
+#define u_get_cpuid()   syscall_3(8, 0, 0, 0)
 
 #endif
