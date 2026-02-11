@@ -49,8 +49,8 @@ long_mode:
     mov es, ax
     mov ss, ax
     xor ax, ax          
-    mov fs, ax          ; FS = 0
-    mov gs, ax          ; GS = 0 
+    ; mov fs, ax          ; FS = 0
+    ; mov gs, ax          ; GS = 0 
 
     mov rdi, [0x7000 + 24] ; cpu_context_p
     mov rsp, [0x7000 + 0]  ; trampoline_stack

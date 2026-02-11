@@ -29,7 +29,6 @@ isr_stub_%1:
 %endrep
 
 common_stub:
-    ; 1. Save regs
     push rax
     push rcx
     push rdx
@@ -46,25 +45,20 @@ common_stub:
     push r14
     push r15
 
-    ; 2. GS swap if we go from User Mode
     test qword [rsp + 144], 3
     jz .no_swap_in
     swapgs
 .no_swap_in:
 
     mov rdi, rsp
-    
     call interrupt_dispatch
-    
-    mov rsp, rax               
+    mov rsp, rax
 
-    ; 3. GS swap if we going back to User Mode
     test qword [rsp + 144], 3
     jz .no_swap_out
     swapgs
 .no_swap_out:
 
-    ; 4. Restore state
     pop r15
     pop r14
     pop r13

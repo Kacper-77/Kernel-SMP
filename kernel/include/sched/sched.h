@@ -2,6 +2,8 @@
 #define SCHED_H
 
 #include <idt.h>
+#include <cpu.h>
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -35,8 +37,12 @@ uint64_t schedule(interrupt_frame_t* frame);
 void sched_yield();
 void task_exit();
 void sched_reap();
-task_t* sched_get_current();
 
+void enqueue_task(cpu_context_t* cpu, task_t* task);
+task_t* dequeue_task(cpu_context_t* cpu);
+void sched_update_sleepers();
+
+task_t* sched_get_current();
 task_t* arch_task_create(void (*entry_point)(void));
 task_t* arch_task_create_user(void (*entry_point)(void));
 

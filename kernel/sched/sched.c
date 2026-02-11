@@ -157,44 +157,72 @@ void sched_init() {
 // 4. Updates TSS for the next interrupt/syscall and performs a CR3 switch if necessary.
 //
 uint64_t schedule(interrupt_frame_t* frame) {
+    uint64_t f = spin_irq_save();
+    spin_lock(&sched_lock_);
+    
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
     uint64_t now = get_uptime_ms();
 
-    // 1. Save context of current task
+    // Save current task context
     if (current) {
         current->rsp = (uintptr_t)frame;
-        
-        // If task is still alive and doesn't sleep push to queue (Round Robin)
-        if (current->state == TASK_RUNNING) {
-            current->state = TASK_READY;
-            if (current != cpu->idle_task) {
-                enqueue_task(cpu, current);
+        if (current->state == TASK_RUNNING) current->state = TASK_READY;
+        // Allow migration for generic tasks (TID >= 10)
+        if (current->tid >= 10) current->cpu_id = (uint64_t)-1;
+    }
+
+    task_t* scheduled_next = NULL;
+    task_t* iter = root_task;
+
+    // Search for the next available task
+    for (int i = 0; i < 256; i++) {
+        // Wake up sleeping tasks if time has passed
+        if (iter->state == TASK_SLEEPING) {
+            if (now >= iter->sleep_until) {
+                iter->state = TASK_READY;
             }
+        }
+
+        // Pick next READY task (considering CPU affinity)
+        if (scheduled_next == NULL) {
+            if (iter->state == TASK_READY && (iter->cpu_id == (uint64_t)-1 || iter->cpu_id == cpu->cpu_id)) {
+                iter->state = TASK_RUNNING; 
+                iter->cpu_id = cpu->cpu_id;
+                scheduled_next = iter;
+            }
+        }
+
+        iter = iter->next;
+        if (iter == root_task) break;
+    }
+
+    // Fallback to CPU-specific idle task if no tasks are ready
+    if (!scheduled_next) {
+        scheduled_next = cpu->idle_task;
+    }
+
+    scheduled_next->state = TASK_RUNNING;
+    scheduled_next->cpu_id = cpu->cpu_id;
+    cpu->current_task = scheduled_next;
+
+    cpu->current_task = scheduled_next;
+
+    // Set stack for syscall/interrupt
+    cpu->tss.rsp0 = (uintptr_t)scheduled_next->stack_base + scheduled_next->stack_size;
+    cpu->kernel_stack = cpu->tss.rsp0;
+
+    if (scheduled_next->cr3 != 0) {
+        uint64_t current_cr3 = read_cr3();
+        if (scheduled_next->cr3 != current_cr3) {
+            write_cr3(scheduled_next->cr3);
         }
     }
 
-    // 2. Get next task from local queue
-    task_t* next = dequeue_task(cpu);
-
-    // 3. Fallback
-    // For now just Idle
-    if (!next) {
-        next = cpu->idle_task;
-    }
-
-    // 4. Update state and TSS
-    next->state = TASK_RUNNING;
-    cpu->current_task = next;
-
-    cpu->tss.rsp0 = (uintptr_t)next->stack_base + next->stack_size;
+    spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
     
-    // CR3 Switch
-    if (next->cr3 != 0 && next->cr3 != read_cr3()) {
-        write_cr3(next->cr3);
-    }
-
-    return next->rsp;
+    return scheduled_next->rsp;  // Return stack pointer for context switch
 }
 
 //

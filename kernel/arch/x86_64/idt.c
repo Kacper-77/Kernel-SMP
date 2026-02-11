@@ -54,7 +54,9 @@ uint64_t interrupt_dispatch(interrupt_frame_t* frame) {
     } else if (frame->vector_number == 32) {
         if (get_cpu()->cpu_id == 0) system_uptime_ms += 10;
 
+        // sched_update_sleepers();
         lapic_send_eoi();
+        
         next_rsp = schedule(frame);
     } else if (frame->vector_number == 33) {
         ps2_keyboard_handler();

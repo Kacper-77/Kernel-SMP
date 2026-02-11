@@ -200,7 +200,7 @@ void kernel_main_high(BootInfo *bi) {
             // panic("End of boot test - halting system.");
         }
     }
-    
+
     vmm_unmap_range(vmm_get_pml4(), 0x0, 0x100000); // UEFI/BIOS area
     vmm_unmap_range(vmm_get_pml4(), KERNEL_PHYS_BASE, 0x400000); // Kernel identity
     kprint("Kernel isolated.\n");

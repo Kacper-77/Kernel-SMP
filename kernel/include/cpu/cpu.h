@@ -2,8 +2,11 @@
 #define CPU_H
 
 #include <stdint.h>
+#include <stddef.h>
 
-extern cpu_context_t* cpu_table[32];
+#include <spinlock.h>
+#include <std_funcs.h>
+
 
 typedef struct tss {
     uint32_t reserved0;
@@ -58,13 +61,7 @@ typedef struct cpu_context {
     struct {
         uint16_t limit;
         uint64_t base;
-    } __attribute__((packed)) gdt_ptr;
-
-    // Runqueue 
-    spinlock_t rq_lock;             // CPU exclusive lock
-    struct task* rq_head;
-    struct task* rq_tail;           
-    uint64_t rq_count;       
+    } __attribute__((packed)) gdt_ptr;      
     
     // Scheduler
     struct task* current_task;
@@ -72,7 +69,15 @@ typedef struct cpu_context {
     
     uint64_t pmm_last_index;
     uint32_t lapic_ticks_per_ms;
-} __attribute__((packed)) cpu_context_t;
+
+    // Runqueue 
+    spinlock_t rq_lock;             // CPU exclusive lock
+    struct task* rq_head;
+    struct task* rq_tail;           
+    uint64_t rq_count; 
+} cpu_context_t;
+
+extern cpu_context_t* cpu_table[32];
 
 // Initialization of BSP and SYSCALLS
 void cpu_init_bsp();

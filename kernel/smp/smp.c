@@ -100,8 +100,8 @@ void kernel_main_ap(cpu_context_t* ctx) {
     }
     kfree((void*)ap_message);
 
-    // arch_task_create(ap_test_task);
-    // arch_task_create(ap_test_task2);
+    arch_task_create(ap_test_task);
+    arch_task_create(ap_test_task2);
     arch_task_create_user(user_test_task_ap);
 
     __asm__ volatile("sti");

@@ -24,6 +24,8 @@ void panic(const char* message) {
     kprint_raw("CPU ID: "); kprint_hex_raw(get_cpu()->cpu_id);
     kprint_raw("\nREASON: "); kprint_raw(message);
     kprint_raw("\n\nSystem halted permanently.\n");
+    kprint_raw("GS_BASE: "); kprint_hex_raw(read_msr(0xC0000101));
+    kprint_raw("KERNEL_GS_BASE: "); kprint_hex_raw(read_msr(0xC0000102));
 
     for (;;) {
         __asm__ volatile("hlt");
