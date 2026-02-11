@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+extern cpu_context_t* cpu_table[32];
+
 typedef struct tss {
     uint32_t reserved0;
     uint64_t rsp0;      // Ring 0
@@ -57,6 +59,12 @@ typedef struct cpu_context {
         uint16_t limit;
         uint64_t base;
     } __attribute__((packed)) gdt_ptr;
+
+    // Runqueue 
+    spinlock_t rq_lock;             // CPU exclusive lock
+    struct task* rq_head;
+    struct task* rq_tail;           
+    uint64_t rq_count;       
     
     // Scheduler
     struct task* current_task;
@@ -132,6 +140,10 @@ static inline void write_msr(uint32_t msr, uint64_t value) {
 
 static inline void cpu_init_context(cpu_context_t* ctx) {
     ctx->self = ctx;
+    ctx->rq_head = NULL;
+    ctx->rq_tail = NULL;
+    ctx->rq_count = 0;
+    ctx->rq_lock = (spinlock_t){0};
     uint64_t addr = (uintptr_t)ctx;
     
     // MSR_GS_BASE (0xC0000101)
@@ -139,6 +151,15 @@ static inline void cpu_init_context(cpu_context_t* ctx) {
 
     // MSR_KERNEL_GS_BASE (0xC0000102)
     write_msr(0xC0000102, addr);
+}
+
+static inline void cpu_register_context(cpu_context_t* ctx) {
+    cpu_table[ctx->cpu_id] = ctx;
+}
+
+static inline cpu_context_t* get_cpu_by_id(uint64_t id) {
+    if (id >= 32) return NULL;
+    return cpu_table[id];
 }
 
 #endif

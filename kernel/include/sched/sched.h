@@ -21,7 +21,10 @@ typedef struct task {
     task_state_t state;
     bool is_user;       
     uintptr_t cr3;
-    struct task* next;
+
+    struct task* next;        // Global list for Reaper
+    struct task* sched_next;  // Runqueue Per-CPU
+
     uint64_t cpu_id;
     uint64_t sleep_until;
 } __attribute__((packed)) task_t;

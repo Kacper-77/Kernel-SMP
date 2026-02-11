@@ -15,6 +15,7 @@ void cpu_init_bsp() {
     // 2. Basic data
     ctx->self = ctx;
     ctx->cpu_id = 0;
+    cpu_register_context(ctx);
     ctx->pmm_last_index = 0;
 
     // 3. Stack

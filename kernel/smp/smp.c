@@ -21,6 +21,7 @@ extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
 
 static uint64_t cpu_count = 1;
+cpu_context_t* cpu_table[32] = { 0 };
 
 static void ap_test_task() {
     int x = 0;
@@ -131,6 +132,7 @@ void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
     cpu_context_t* ctx = (cpu_context_t*)phys_to_virt((uintptr_t)pmm_alloc_frame());
     memset(ctx, 0, sizeof(cpu_context_t));
     ctx->cpu_id = cpu_id;
+    cpu_register_context(ctx);
     ctx->lapic_id = lapic_id;
     ctx->self = ctx;
     
