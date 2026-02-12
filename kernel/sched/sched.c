@@ -97,22 +97,22 @@ static task_t* create_idle_struct(void (*entry)(void)) {
     interrupt_frame_t* frame = (interrupt_frame_t*)(stack_top - sizeof(interrupt_frame_t) - 8);
     memset(frame, 0, sizeof(interrupt_frame_t));
 
-    frame->rip = (uintptr_t)entry;
-    frame->cs = 0x08;
+    frame->rip    = (uintptr_t)entry;
+    frame->cs     = 0x08;
     frame->rflags = 0x202; 
-    frame->rsp = stack_top - 8;
-    frame->ss = 0x10;
+    frame->rsp    = stack_top - 8;
+    frame->ss     = 0x10;
 
     frame->vector_number = 0;
     frame->error_code = 0;
 
-    t->cr3 = read_cr3(); 
-    t->is_user = false;
+    t->cr3        = read_cr3(); 
+    t->is_user    = false;
     t->stack_size = stack_size;
-    t->rsp = (uintptr_t)frame;
-    t->tid = 1;  // TID 1 reserved for Idle tasks
-    t->state = TASK_RUNNING;
-    t->cpu_id = get_cpu()->cpu_id;
+    t->rsp        = (uintptr_t)frame;
+    t->tid        = 1;  // TID 1 reserved for Idle tasks
+    t->state      = TASK_RUNNING;
+    t->cpu_id     = get_cpu()->cpu_id;
     return t;
 }
 
@@ -125,9 +125,11 @@ void sched_init() {
     // Convert current execution flow into the 'Main' task (TID 0)
     task_t* main_task = kmalloc(sizeof(task_t));
     memset(main_task, 0, sizeof(task_t));
+    
     main_task->tid = 0;
     main_task->state = TASK_RUNNING;
     main_task->next = main_task;
+
     main_task->cpu_id = cpu->cpu_id;
     main_task->is_user = false;
     main_task->cr3 = read_cr3();
@@ -149,11 +151,12 @@ uint64_t schedule(interrupt_frame_t* frame) {
     // 1. Save IRQ state
     uint64_t f = spin_irq_save();
 
-    // 2. Wake sleepers and enqueue them
-    sched_update_sleepers();
-
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
+
+    // 2. Wake sleepers and enqueue them
+    // Only BSP: Work stealing takes care of that
+    if (cpu->cpu_id == 0) sched_update_sleepers();
 
     // Save current task context (per-CPU, no global lock needed)
     if (current) {

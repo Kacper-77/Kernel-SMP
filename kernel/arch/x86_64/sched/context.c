@@ -99,15 +99,16 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     uintptr_t code_phys = (uintptr_t)pmm_alloc_frames(4);
     uintptr_t code_virt = 0x400000;
     vmm_map_range(pml4_virt, code_virt, code_phys, 4 * PAGE_SIZE, 
-              PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+                PTE_PRESENT | PTE_WRITABLE | PTE_USER);
 
     memset((void*)phys_to_virt(code_phys), 0, 4 * PAGE_SIZE);
     memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 4 * PAGE_SIZE);
 
     // Setup User Stack 
-    uintptr_t user_stack_phys = (uintptr_t)pmm_alloc_frame();
+    uintptr_t user_stack_phys = (uintptr_t)pmm_alloc_frames(4);
     uintptr_t user_stack_virt = 0x00007FFFF0000000; 
-    vmm_map(pml4_virt, user_stack_virt, user_stack_phys, 0x07); 
+    vmm_map_range(pml4_virt, user_stack_virt, user_stack_phys, 4 * PAGE_SIZE,
+                PTE_PRESENT | PTE_WRITABLE | PTE_USER); 
 
     interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
@@ -117,7 +118,7 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     frame->ss     = 0x23;     
     frame->rflags = 0x202; 
     
-    frame->rsp = user_stack_virt + 0x1000 - 8; 
+    frame->rsp = user_stack_virt + (4 * PAGE_SIZE) - 8; 
     frame->rbp = frame->rsp;
 
     t->rsp = (uintptr_t)frame;
