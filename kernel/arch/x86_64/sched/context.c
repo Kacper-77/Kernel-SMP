@@ -5,12 +5,9 @@
 #include <kmalloc.h>
 #include <spinlock.h>
 #include <std_funcs.h>
+#include <cpu.h>
 
 #include <stddef.h>
-
-extern char _user_start[];
-extern char _user_end[];
-extern char _user_lma[];
 
 static uint64_t next_tid = 10;  // Start TIDs for user/test tasks at 10
 
@@ -68,6 +65,9 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     
     spin_unlock(&sched_lock_);
     spin_irq_restore(f);
+
+    cpu_context_t* target = get_cpu();
+    enqueue_task(target, t);
 
     return t;
 }
@@ -136,6 +136,9 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     
     spin_unlock(&sched_lock_);
     spin_irq_restore(f);
+
+    cpu_context_t* target = get_cpu();
+    enqueue_task(target, t);
 
     return t;
 }

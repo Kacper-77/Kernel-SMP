@@ -31,7 +31,6 @@ static void idle_task() {
 // RUNQUEUE SECTION
 //
 void enqueue_task(cpu_context_t* cpu, task_t* task) {
-    uint64_t f = spin_irq_save();
     spin_lock(&cpu->rq_lock);
 
     task->sched_next = NULL;
@@ -44,11 +43,9 @@ void enqueue_task(cpu_context_t* cpu, task_t* task) {
     cpu->rq_count++;
 
     spin_unlock(&cpu->rq_lock);
-    spin_irq_restore(f);
 }
 
 task_t* dequeue_task(cpu_context_t* cpu) {
-    uint64_t f = spin_irq_save();
     spin_lock(&cpu->rq_lock);
 
     task_t* t = cpu->rq_head;
@@ -59,23 +56,16 @@ task_t* dequeue_task(cpu_context_t* cpu) {
     }
 
     spin_unlock(&cpu->rq_lock);
-    spin_irq_restore(f);
-
     return t;
 }
 
-void sched_update_sleepers() {
+static void sched_update_sleepers() {
     uint64_t now = get_uptime_ms();
-    
-    uint64_t f = spin_irq_save();
+
     spin_lock(&sched_lock_);
 
     task_t* iter = root_task;
-    if (!iter) {
-        spin_unlock(&sched_lock_);
-        spin_irq_restore(f);
-        return;
-    }
+    if (!iter) { spin_unlock(&sched_lock_); return; }
 
     do {
         if (iter->state == TASK_SLEEPING && now >= iter->sleep_until) {
@@ -89,7 +79,6 @@ void sched_update_sleepers() {
     } while (iter != root_task);
 
     spin_unlock(&sched_lock_);
-    spin_irq_restore(f);
 }
 
 //
@@ -151,64 +140,70 @@ void sched_init() {
 
 //
 // The core Round-Robin scheduler with support for task sleeping and CPU affinity.
-// 1. Saves the context of the interrupted task.
-// 2. Wakes up tasks that have finished their 'msleep'.
-// 3. Selects the next READY task, allowing migration for non-system tasks (TID >= 10).
-// 4. Updates TSS for the next interrupt/syscall and performs a CR3 switch if necessary.
+// Saves the context of the interrupted task.
+// Wakes up tasks that have finished their 'msleep'.
+// Selects the next READY task, allowing migration for non-system tasks (TID >= 10).
+// Updates TSS for the next interrupt/syscall and performs a CR3 switch if necessary.
 //
 uint64_t schedule(interrupt_frame_t* frame) {
+    // 1. Save IRQ state
     uint64_t f = spin_irq_save();
-    spin_lock(&sched_lock_);
-    
+
+    // 2. Wake sleepers and enqueue them
+    sched_update_sleepers();
+
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
-    uint64_t now = get_uptime_ms();
 
-    // Save current task context
+    // Save current task context (per-CPU, no global lock needed)
     if (current) {
-        current->rsp = (uintptr_t)frame;
-        if (current->state == TASK_RUNNING) current->state = TASK_READY;
-        // Allow migration for generic tasks (TID >= 10)
-        if (current->tid >= 10) current->cpu_id = (uint64_t)-1;
+    current->rsp = (uintptr_t)frame;
+
+    if (current->state == TASK_RUNNING) {
+        current->state = TASK_READY;
+        enqueue_task(cpu, current); 
     }
 
-    task_t* scheduled_next = NULL;
-    task_t* iter = root_task;
-
-    // Search for the next available task
-    for (int i = 0; i < 256; i++) {
-        // Wake up sleeping tasks if time has passed
-        if (iter->state == TASK_SLEEPING) {
-            if (now >= iter->sleep_until) {
-                iter->state = TASK_READY;
-            }
-        }
-
-        // Pick next READY task (considering CPU affinity)
-        if (scheduled_next == NULL) {
-            if (iter->state == TASK_READY && (iter->cpu_id == (uint64_t)-1 || iter->cpu_id == cpu->cpu_id)) {
-                iter->state = TASK_RUNNING; 
-                iter->cpu_id = cpu->cpu_id;
-                scheduled_next = iter;
-            }
-        }
-
-        iter = iter->next;
-        if (iter == root_task) break;
+    if (current->tid >= 10)
+        current->cpu_id = (uint64_t)-1;
     }
 
-    // Fallback to CPU-specific idle task if no tasks are ready
+    // 3. Try to get next task from local runqueue
+    task_t* scheduled_next = dequeue_task(cpu);
+
+    // 4. If local empty, try to steal from other CPUs
     if (!scheduled_next) {
-        scheduled_next = cpu->idle_task;
+        for (int i = 0; i < 32; i++) {
+            cpu_context_t* other = get_cpu_by_id(i);
+            if (!other || other == cpu) continue;
+
+            // try to get a task from that cpu
+            spin_lock(&other->rq_lock);
+            task_t* t = other->rq_head;
+            if (t) {
+                other->rq_head = t->sched_next;
+                if (!other->rq_head) other->rq_tail = NULL;
+                other->rq_count--;
+                t->sched_next = NULL;
+            }
+            spin_unlock(&other->rq_lock);
+
+            if (t) {
+                scheduled_next = t;
+                break;
+            }
+        }
     }
 
+    // 5. Fallback to idle
+    if (!scheduled_next) scheduled_next = cpu->idle_task;
+
+    // 6. Prepare chosen task
     scheduled_next->state = TASK_RUNNING;
     scheduled_next->cpu_id = cpu->cpu_id;
     cpu->current_task = scheduled_next;
 
-    cpu->current_task = scheduled_next;
-
-    // Set stack for syscall/interrupt
+    // 7. Setup kernel stack/TSS and CR3 switch if needed
     cpu->tss.rsp0 = (uintptr_t)scheduled_next->stack_base + scheduled_next->stack_size;
     cpu->kernel_stack = cpu->tss.rsp0;
 
@@ -219,10 +214,9 @@ uint64_t schedule(interrupt_frame_t* frame) {
         }
     }
 
-    spin_unlock(&sched_lock_);
+    // 8. restore irq flags and return stack pointer
     spin_irq_restore(f);
-    
-    return scheduled_next->rsp;  // Return stack pointer for context switch
+    return scheduled_next->rsp;
 }
 
 //
@@ -279,7 +273,6 @@ void sched_reap() {
     spin_lock(&sched_lock_);
 
     // 2. Extract key data about tasks
-    extern task_t* root_task;
     task_t* prev = root_task;
     task_t* current = root_task->next;
 

@@ -40,7 +40,6 @@ void sched_reap();
 
 void enqueue_task(cpu_context_t* cpu, task_t* task);
 task_t* dequeue_task(cpu_context_t* cpu);
-void sched_update_sleepers();
 
 task_t* sched_get_current();
 task_t* arch_task_create(void (*entry_point)(void));
