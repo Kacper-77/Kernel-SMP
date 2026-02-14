@@ -12,3 +12,10 @@ include_directories(${CMAKE_SOURCE_DIR}/common)
 # Subdirectories
 add_subdirectory(boot)
 add_subdirectory(kernel)
+add_subdirectory(user)
+
+add_custom_target(initrd ALL
+    COMMAND tar -cf ${CMAKE_BINARY_DIR}/initrd.tar -C ${CMAKE_SOURCE_DIR}/ramdisk .
+    DEPENDS init.elf
+    COMMENT "Packing TAR..."
+)

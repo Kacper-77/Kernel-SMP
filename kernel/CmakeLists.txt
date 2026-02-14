@@ -13,18 +13,19 @@ set(CMAKE_ASM_NASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "-target x86_64-unknown-elf -ffreestanding -mcmodel=kernel -mno-red-zone -fno-stack-protector -fno-pic -fno-pie -Wall -Wextra")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/fs)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/cpu)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/smp)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/atomic)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/syscall)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/cpu/apic)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/utils)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/sched)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/arch/x86_64)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/arch/x86_64/drivers)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/arch/x86_64/drivers/ps2)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/memory)
 file(GLOB KERNEL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/fs/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/cpu/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/cpu/*.asm"

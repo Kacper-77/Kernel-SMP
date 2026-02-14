@@ -14,7 +14,7 @@ static spinlock_t vmm_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 page_table_t* kernel_pml4 = NULL;
 static uintptr_t kernel_pml4_phys = 0;
 
-// Symbols from the new linker script
+// Symbols from the linker script
 extern uint8_t _kernel_start[];
 extern uint8_t _kernel_end[];
 extern uint8_t _text_start[], _text_end[];

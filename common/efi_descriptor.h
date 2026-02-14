@@ -1,10 +1,6 @@
 #ifndef EFI_DESC_H
 #define EFI_DESC_H
 
-//
-// Only to avoid problems with UEFI lib
-//
-
 typedef struct {
     uint32_t type;
     uint64_t physical_start;

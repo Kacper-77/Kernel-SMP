@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.16)
+project(user C)
+
+set(USER_FLAGS "-target x86_64-unknown-elf -ffreestanding -fno-stack-protector -fno-pic -fno-pie -mno-red-zone -m64 -Wall -Wextra")
+
+add_executable(init.elf init.c)
+
+set_target_properties(init.elf PROPERTIES COMPILE_FLAGS "${USER_FLAGS}")
+
+set(LD_LLD_PATH "/opt/homebrew/bin/ld.lld")
+set_target_properties(init.elf PROPERTIES 
+    LINK_FLAGS "-nostdlib -static -Ttext 0x400000"
+    LINKER_LANGUAGE C
+)
+
+set(CMAKE_C_LINK_EXECUTABLE "${LD_LLD_PATH} <OBJECTS> -o <TARGET> <LINK_FLAGS>")
+
+add_custom_command(TARGET init.elf POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/ramdisk
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/init.elf ${CMAKE_SOURCE_DIR}/ramdisk/init.elf
+)
