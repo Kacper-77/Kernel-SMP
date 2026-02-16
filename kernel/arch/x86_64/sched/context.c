@@ -143,3 +143,53 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
 
     return t;
 }
+
+task_t* arch_task_create_user_elf(uintptr_t entry_point, uintptr_t cr3_phys, uintptr_t stack_top) {
+    extern task_t* root_task;
+    extern spinlock_t sched_lock_;
+
+    task_t* t = kmalloc(sizeof(task_t));
+    if (!t) return NULL;
+    memset(t, 0, sizeof(task_t));
+
+    t->stack_size = 0x4000;
+    t->stack_base = (uintptr_t)kmalloc(t->stack_size);
+    if (!t->stack_base) {
+        kfree(t);
+        return NULL;
+    }
+    uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;
+
+    t->cr3     = cr3_phys; 
+    t->is_user = true;
+    t->state   = TASK_READY;
+    t->cpu_id  = -1;
+
+    interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
+    memset(frame, 0, sizeof(interrupt_frame_t));
+
+    frame->rip    = entry_point;  // e_entry
+    frame->cs     = 0x1B;         
+    frame->ss     = 0x23;         
+    frame->rflags = 0x202;        
+    
+    frame->rsp = stack_top - 8; 
+    frame->rbp = stack_top;
+
+    t->rsp = (uintptr_t)frame;
+
+    __asm__ volatile("mfence" ::: "memory");
+
+    uint64_t f = spin_irq_save();
+    spin_lock(&sched_lock_);
+    t->tid  = __atomic_fetch_add(&next_tid, 1, __ATOMIC_SEQ_CST);
+    t->next = root_task->next;
+    root_task->next = t;
+    spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
+
+    cpu_context_t* target = get_cpu();
+    enqueue_task(target, t);
+
+    return t;
+}

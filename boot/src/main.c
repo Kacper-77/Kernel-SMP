@@ -1,5 +1,8 @@
 #include <Uefi.h>
 #include <Library/BaseMemoryLib.h>
+#include <Protocol/LoadedImage.h>
+#include <Protocol/SimpleFileSystem.h> 
+#include <Guid/FileInfo.h>
 #include <boot.h>
 #include <boot_info.h>
 #include <gop.h>
@@ -65,6 +68,55 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     }
 
     boot_log(L"[BOOT] Preparation complete. Exiting Boot Services...");
+
+    // !!!!!!!!!!!!!!!!!!  CLEANUP  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FS = NULL;
+    EFI_LOADED_IMAGE_PROTOCOL* LoadedImage = NULL;
+    EFI_FILE_PROTOCOL* Root = NULL;
+    EFI_FILE_PROTOCOL* InitrdFile = NULL;
+
+    gBS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
+    gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&FS);
+    FS->OpenVolume(FS, &Root);
+
+    EFI_STATUS s = Root->Open(Root, &InitrdFile, L"initrd.tar", EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(s)) {
+        boot_panic(L"Could not find initrd.tar!");
+    }
+
+    UINT64 FinalSize = 0;
+    
+    s = InitrdFile->SetPosition(InitrdFile, 0xFFFFFFFFFFFFFFFFULL);
+    if (EFI_ERROR(s)) {
+        boot_panic(L"SetPosition to end failed!");
+    }
+
+    s = InitrdFile->GetPosition(InitrdFile, &FinalSize);
+    if (EFI_ERROR(s) || FinalSize == 0) {
+        boot_panic(L"GetPosition failed or file is empty!");
+    }
+
+    InitrdFile->SetPosition(InitrdFile, 0);
+
+    UINTN Pages = (FinalSize + 4095) / 4096;
+    EFI_PHYSICAL_ADDRESS RamdiskPhys;
+    s = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, Pages, &RamdiskPhys);
+    if (EFI_ERROR(s)) {
+        boot_panic(L"Failed to allocate pages for RAMDISK");
+    }
+
+    UINTN BytesToRead = (UINTN)FinalSize;
+    s = InitrdFile->Read(InitrdFile, &BytesToRead, (VOID*)RamdiskPhys);
+
+    if (EFI_ERROR(s) || BytesToRead != FinalSize) {
+        boot_panic(L"Read failed or size mismatch!");
+    }
+
+    bi.ramdisk_addr = (void*)RamdiskPhys;
+    bi.ramdisk_size = (uint64_t)FinalSize;
+
+    boot_log(L"[BOOT] RAMDISK loaded successfully.");
+    // !!!!!!!!!!!!!!!!!!  CLEANUP  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     // 6. Get final memory map and exit UEFI
     // After this point, UEFI Boot Services are terminated. No more boot_log or gBS calls

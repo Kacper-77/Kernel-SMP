@@ -14,8 +14,3 @@ set_target_properties(init.elf PROPERTIES
 )
 
 set(CMAKE_C_LINK_EXECUTABLE "${LD_LLD_PATH} <OBJECTS> -o <TARGET> <LINK_FLAGS>")
-
-add_custom_command(TARGET init.elf POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/ramdisk
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/init.elf ${CMAKE_SOURCE_DIR}/ramdisk/init.elf
-)

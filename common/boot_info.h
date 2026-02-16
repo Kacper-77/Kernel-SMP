@@ -15,30 +15,34 @@ typedef struct {
     uint32_t green_mask;
     uint32_t blue_mask;
     uint32_t reserved_mask;
-} BootFramebuffer;
+} __attribute__((packed)) BootFramebuffer;
 
 typedef struct {
     void    *memory_map;
     uint64_t memory_map_size;
     uint64_t descriptor_size;
     uint32_t descriptor_version;
-} BootMemoryMap;
+    uint32_t _pad0;  // Filler
+} __attribute__((packed)) BootMemoryMap;
 
 typedef struct {
     void *rsdp;
-} BootAcpi;
+} __attribute__((packed)) BootAcpi;
 
 typedef struct {
     void    *kernel_entry;
     void    *kernel_base;
     uint64_t kernel_size;
-} BootKernel;
+} __attribute__((packed)) BootKernel;
 
 typedef struct {
+    void* ramdisk_addr;
+    uint64_t ramdisk_size;
+    
     BootFramebuffer fb;
     BootMemoryMap   mmap;
     BootAcpi        acpi;
     BootKernel      kernel;
-} BootInfo;
+} __attribute__((packed)) BootInfo;
 
 #endif

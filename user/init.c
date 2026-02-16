@@ -1,6 +1,10 @@
 #include <userlib.h>
 
 void _start() {
-    u_print("Hello from ELF world!\n");
-    u_exit();
+    char msg[] = {'E', 'L', 'F', ' ', 'W', 'O', 'R', 'K', 'S', '!', '\n', 0};
+    while(1) {
+        u_print(msg);
+        u_sleep(100);
+        u_exit();
+    }
 }

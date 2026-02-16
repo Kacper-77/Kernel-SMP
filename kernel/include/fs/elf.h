@@ -41,6 +41,12 @@ typedef struct {
     uint64_t p_align;
 } __attribute__((packed)) Elf64_Phdr;
 
-uintptr_t elf_load(void* elf_data);
+typedef struct {
+    uintptr_t entry;      
+    uintptr_t pml4_phys;  
+    uintptr_t stack_top;  
+} elf_info_t;
+
+elf_info_t elf_load(void* elf_data);
 
 #endif

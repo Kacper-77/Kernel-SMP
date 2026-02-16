@@ -44,5 +44,6 @@ task_t* dequeue_task(cpu_context_t* cpu);
 task_t* sched_get_current();
 task_t* arch_task_create(void (*entry_point)(void));
 task_t* arch_task_create_user(void (*entry_point)(void));
+task_t* arch_task_create_user_elf(uintptr_t entry_point, uintptr_t cr3_phys, uintptr_t stack_top);
 
 #endif

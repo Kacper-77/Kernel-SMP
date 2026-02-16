@@ -20,6 +20,8 @@
 #include <ioapic.h>
 #include <i8042.h>
 #include <io.h>
+#include <tar.h>
+#include <elf.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -47,8 +49,8 @@ static void user_test_task() {
 }
 
 static void user_test_task_2() {
-    char msg[] = {'T', 'a', 's', 'k', ' ', '2', '\n'};
-    char msg2[] = {'D', 'o', 'n', 'e', '\n'};
+    char msg[] = {'T', 'a', 's', 'k', ' ', '2', '\n', 0};
+    char msg2[] = {'D', 'o', 'n', 'e', '\n', 0};
     
     volatile uint64_t counter = 0;
     while(counter < 5) {
@@ -62,7 +64,7 @@ static void user_test_task_2() {
 
 
 static void user_test_task_echo() {
-    char msg[] = {'S','H','E','L','L','\n',0};
+    char msg[] = {'S','H','E','L','L','\n', 0};
     u_print(msg);
 
     while(1) {
@@ -121,6 +123,7 @@ void kernel_main(BootInfo *bi) {
 
 // High-half entry point
 void kernel_main_high(BootInfo *bi) {
+    kprint("BootInfo pointer: "); kprint_hex((uintptr_t)bi); kprint("\n");
     cpu_init_bsp();
     cpu_init_syscalls();
     init_sys_table();
@@ -183,6 +186,38 @@ void kernel_main_high(BootInfo *bi) {
             i8042_init();
 
             sched_init();
+
+            void* ramdisk_vaddr = (void*)phys_to_virt((uintptr_t)bi->ramdisk_addr);
+            tar_init(ramdisk_vaddr, bi->ramdisk_size);
+
+            kprint("##### RAMDISK DIAGNOSTIC #####\n");
+            kprint("Address Phys: "); kprint_hex((uintptr_t)bi->ramdisk_addr); kprint("\n");
+            kprint("Address Virt: "); kprint_hex((uintptr_t)ramdisk_vaddr); kprint("\n");
+            kprint("Size:         "); kprint_hex(bi->ramdisk_size); kprint(" bytes\n");
+
+            size_t size = 0;
+            void* file = NULL;
+
+            file = tar_lookup("init.elf", &size);
+            if (!file) {
+                kprint("Trying alternative path...\n");
+                file = tar_lookup("ramdisk/init.elf", &size);
+            }
+
+            if (file) {
+                kprint("SUCCESS! Found init.elf at: "); kprint_hex((uintptr_t)file);
+                kprint(" Size: "); kprint_hex(size); kprint("\n");
+                
+                elf_info_t info = elf_load(file);
+                if (info.entry != 0) {
+                    kprint("Launching init.elf...\n");
+                    arch_task_create_user_elf(info.entry, info.pml4_phys, info.stack_top); 
+                } else {
+                kprint("ERROR: Could not find init.elf in TAR. Printing first 16 bytes of TAR:\n");
+                uint8_t* raw = (uint8_t*)ramdisk_vaddr;
+                for(int i = 0; i < 16; i++) { kprint_hex(raw[i]); kprint(" "); }
+                }
+            }
 
             kprint("Starting SMP initialization...\n");
             smp_init(bi);

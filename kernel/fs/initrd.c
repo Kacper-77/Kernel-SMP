@@ -2,6 +2,7 @@
 #include <std_funcs.h>
 
 #include <stdint.h>
+#include <stddef.h>
 
 static void* tar_base = NULL;
 static size_t tar_limit = 0;

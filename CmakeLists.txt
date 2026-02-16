@@ -15,7 +15,10 @@ add_subdirectory(kernel)
 add_subdirectory(user)
 
 add_custom_target(initrd ALL
-    COMMAND tar -cf ${CMAKE_BINARY_DIR}/initrd.tar -C ${CMAKE_SOURCE_DIR}/ramdisk .
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/ramdisk
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:init.elf> ${CMAKE_BINARY_DIR}/ramdisk/init.elf
+    COMMAND tar -cf ${CMAKE_BINARY_DIR}/initrd.tar --format=ustar -C ${CMAKE_BINARY_DIR}/ramdisk init.elf
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_BINARY_DIR}/initrd.tar ${CMAKE_SOURCE_DIR}/esp/initrd.tar
     DEPENDS init.elf
-    COMMENT "Packing TAR..."
+    COMMENT "Building USTAR initrd.tar..."
 )
