@@ -204,18 +204,14 @@ void kernel_main_high(BootInfo *bi) {
                 file = tar_lookup("ramdisk/init.elf", &size);
             }
 
-            if (file) {
+           if (file) {
                 kprint("SUCCESS! Found init.elf at: "); kprint_hex((uintptr_t)file);
                 kprint(" Size: "); kprint_hex(size); kprint("\n");
                 
-                elf_info_t info = elf_load(file);
-                if (info.entry != 0) {
-                    kprint("Launching init.elf...\n");
-                    arch_task_create_user_elf(info.entry, info.pml4_phys, info.stack_top); 
+                if (arch_task_spawn_elf(file)) {
+                    kprint("Launching init.elf (TID will be assigned)...\n");
                 } else {
-                kprint("ERROR: Could not find init.elf in TAR. Printing first 16 bytes of TAR:\n");
-                uint8_t* raw = (uint8_t*)ramdisk_vaddr;
-                for(int i = 0; i < 16; i++) { kprint_hex(raw[i]); kprint(" "); }
+                    kprint("ERROR: Failed to spawn init.elf - check VMM or ELF header.\n");
                 }
             }
 

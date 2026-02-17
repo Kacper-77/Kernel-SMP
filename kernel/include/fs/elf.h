@@ -47,6 +47,6 @@ typedef struct {
     uintptr_t stack_top;  
 } elf_info_t;
 
-elf_info_t elf_load(void* elf_data);
+uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data);
 
 #endif

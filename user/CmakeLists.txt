@@ -8,8 +8,9 @@ add_executable(init.elf init.c)
 set_target_properties(init.elf PROPERTIES COMPILE_FLAGS "${USER_FLAGS}")
 
 set(LD_LLD_PATH "/opt/homebrew/bin/ld.lld")
+
 set_target_properties(init.elf PROPERTIES 
-    LINK_FLAGS "-nostdlib -static -Ttext 0x400000"
+    LINK_FLAGS "-nostdlib -static -T ${CMAKE_CURRENT_SOURCE_DIR}/linker.ld"
     LINKER_LANGUAGE C
 )
 

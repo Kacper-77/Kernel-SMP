@@ -25,6 +25,8 @@ static bool is_user_range(const void* addr, size_t size) {
 }
 
 static uint64_t sys_kprint(const char* str) {
+    if (!str) return -1;
+
     // If pointer is not in lower half
     if ((uintptr_t)str >= KERNEL_SPACE_START) {
         kprint("\n!!!! Pointer is in Higher Half !!!!\n"); 

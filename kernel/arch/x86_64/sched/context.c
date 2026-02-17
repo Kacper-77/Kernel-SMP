@@ -6,6 +6,7 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 #include <cpu.h>
+#include <elf.h>
 
 #include <stddef.h>
 
@@ -144,23 +145,29 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     return t;
 }
 
-task_t* arch_task_create_user_elf(uintptr_t entry_point, uintptr_t cr3_phys, uintptr_t stack_top) {
+task_t* arch_task_spawn_elf(void* elf_raw_data) {
     extern task_t* root_task;
     extern spinlock_t sched_lock_;
 
+    uintptr_t cr3 = vmm_create_user_pml4();
+    if (!cr3) return NULL;
+
+    uintptr_t entry = elf_load(cr3, elf_raw_data);
+    if (!entry) return NULL;
+
     task_t* t = kmalloc(sizeof(task_t));
-    if (!t) return NULL;
     memset(t, 0, sizeof(task_t));
 
     t->stack_size = 0x4000;
     t->stack_base = (uintptr_t)kmalloc(t->stack_size);
-    if (!t->stack_base) {
-        kfree(t);
-        return NULL;
-    }
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;
 
-    t->cr3     = cr3_phys; 
+    uintptr_t u_stack_virt = 0x00007FFFF0000000;
+    uintptr_t u_stack_phys = (uintptr_t)pmm_alloc_frames(4);
+    vmm_map_range((page_table_t*)phys_to_virt(cr3), u_stack_virt, u_stack_phys, 4 * PAGE_SIZE, 
+                  PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
+
+    t->cr3     = cr3;
     t->is_user = true;
     t->state   = TASK_READY;
     t->cpu_id  = -1;
@@ -168,17 +175,14 @@ task_t* arch_task_create_user_elf(uintptr_t entry_point, uintptr_t cr3_phys, uin
     interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
 
-    frame->rip    = entry_point;  // e_entry
-    frame->cs     = 0x1B;         
-    frame->ss     = 0x23;         
-    frame->rflags = 0x202;        
-    
-    frame->rsp = stack_top - 8; 
-    frame->rbp = stack_top;
+    frame->rip    = entry;
+    frame->cs     = 0x1B;
+    frame->ss     = 0x23;
+    frame->rflags = 0x202;
+    frame->rsp    = u_stack_virt + (4 * PAGE_SIZE) - 8;
+    frame->rbp    = frame->rsp;
 
     t->rsp = (uintptr_t)frame;
-
-    __asm__ volatile("mfence" ::: "memory");
 
     uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
@@ -188,8 +192,6 @@ task_t* arch_task_create_user_elf(uintptr_t entry_point, uintptr_t cr3_phys, uin
     spin_unlock(&sched_lock_);
     spin_irq_restore(f);
 
-    cpu_context_t* target = get_cpu();
-    enqueue_task(target, t);
-
+    enqueue_task(get_cpu(), t);
     return t;
 }
