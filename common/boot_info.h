@@ -38,11 +38,14 @@ typedef struct {
 typedef struct {
     void* ramdisk_addr;
     uint64_t ramdisk_size;
-    
+} __attribute__((packed)) BootRamdisk;
+
+typedef struct {
     BootFramebuffer fb;
     BootMemoryMap   mmap;
     BootAcpi        acpi;
     BootKernel      kernel;
+    BootRamdisk     ramdisk;
 } __attribute__((packed)) BootInfo;
 
 #endif

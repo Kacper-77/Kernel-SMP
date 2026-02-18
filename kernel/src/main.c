@@ -187,13 +187,13 @@ void kernel_main_high(BootInfo *bi) {
 
             sched_init();
 
-            void* ramdisk_vaddr = (void*)phys_to_virt((uintptr_t)bi->ramdisk_addr);
-            tar_init(ramdisk_vaddr, bi->ramdisk_size);
+            void* ramdisk_vaddr = (void*)phys_to_virt((uintptr_t)bi->ramdisk.ramdisk_addr);
+            tar_init(ramdisk_vaddr, bi->ramdisk.ramdisk_size);
 
             kprint("##### RAMDISK DIAGNOSTIC #####\n");
-            kprint("Address Phys: "); kprint_hex((uintptr_t)bi->ramdisk_addr); kprint("\n");
+            kprint("Address Phys: "); kprint_hex((uintptr_t)bi->ramdisk.ramdisk_addr); kprint("\n");
             kprint("Address Virt: "); kprint_hex((uintptr_t)ramdisk_vaddr); kprint("\n");
-            kprint("Size:         "); kprint_hex(bi->ramdisk_size); kprint(" bytes\n");
+            kprint("Size:         "); kprint_hex(bi->ramdisk.ramdisk_size); kprint(" bytes\n");
 
             size_t size = 0;
             void* file = NULL;
