@@ -175,6 +175,8 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
     interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
 
+    bool privileged = (entry >= 0xFFFF800000000000); // !!!!!!!!!!!!!!!!!!!!
+
     frame->rip    = entry;
     frame->cs     = 0x1B;
     frame->ss     = 0x23;

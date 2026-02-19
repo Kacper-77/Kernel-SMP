@@ -79,6 +79,11 @@ uint64_t sys_exit_handler(interrupt_frame_t* frame) {
     return (uint64_t)schedule(frame);
 }
 
+uint64_t sys_yield_handler(interrupt_frame_t* frame) {
+    (void)frame;
+    return (uint64_t)schedule(frame);
+}
+
 uint64_t sys_get_uptime_handler(interrupt_frame_t* frame) {
     (void)frame;
     return get_uptime_ms();
@@ -104,6 +109,7 @@ uint64_t sys_read_kbd_handler(interrupt_frame_t* frame) {
 void init_sys_table() {
     sys_table[SYS_KPRINT]     = sys_kprint_handler;
     sys_table[SYS_EXIT]       = sys_exit_handler;
+    sys_table[SYS_YIELD]      = sys_yield_handler;
     sys_table[SYS_GET_UPTIME] = sys_get_uptime_handler;
     sys_table[SYS_SLEEP]      = sys_sleep_handler;
     sys_table[SYS_KBD_PS2]    = sys_read_kbd_handler;

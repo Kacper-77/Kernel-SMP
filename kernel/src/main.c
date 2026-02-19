@@ -31,7 +31,6 @@ int g_lock_enabled = 0;
 
 syscall_ptr_t sys_table[10] = { 0 };
 
-// Forward declaration
 void kernel_main_high(BootInfo *bi);
 
 static void user_test_task() {
@@ -236,9 +235,9 @@ void kernel_main_high(BootInfo *bi) {
     vmm_unmap_range(vmm_get_pml4(), KERNEL_PHYS_BASE, 0x400000); // Kernel identity
     kprint("Kernel isolated.\n");
 
-    arch_task_create_user(user_test_task);
-    arch_task_create_user(user_test_task_2);
-    arch_task_create_user(user_test_task_echo);
+    // arch_task_create_user(user_test_task);
+    // arch_task_create_user(user_test_task_2);
+    // arch_task_create_user(user_test_task_echo);
 
     __asm__ volatile("sti");
 
