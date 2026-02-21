@@ -60,30 +60,33 @@ void lapic_init_ap() {
 // The BSP performs the actual measurement (10ms window), while APs wait for the result
 // to ensure synchronized timekeeping across all 32 cores.
 //
-void lapic_timer_calibrate() {
+static cpu_context_t* lapic_timer_calibrate() {
     cpu_context_t* cpu = get_cpu();
 
+    const uint32_t calibration_window_ms = 5;
+
     if (cpu->cpu_id == 0) {
-        // Only BSP can calibrate
         lapic_write(LAPIC_TDCR, 0x03);
         lapic_write(LAPIC_TICR, 0xFFFFFFFF);
 
-        pit_prepare_sleep(11932);
+        pit_prepare_sleep(calibration_window_ms * 1193); 
         pit_wait_calibration();
 
         uint32_t current_ticks = lapic_read(LAPIC_TCCR);
-        global_ticks_per_ms = (0xFFFFFFFF - current_ticks) / 10;
+        global_ticks_per_ms = (0xFFFFFFFF - current_ticks) / calibration_window_ms;
+        __asm__ volatile("mfence" ::: "memory");
     } else {
-        // APs waits
         while (global_ticks_per_ms == 0) {
-           __asm__ volatile("pause");
+            __asm__ volatile("pause");
         }
     }
-
+    
     // Save tics
     cpu->lapic_ticks_per_ms = global_ticks_per_ms;
 
     lapic_write(LAPIC_TICR, 0);
+
+    return cpu;
 }
 
 //
@@ -92,7 +95,7 @@ void lapic_timer_calibrate() {
 // at the specified millisecond interval on the given IDT vector.
 //
 void lapic_timer_init(uint32_t ms_interval, uint8_t vector) {
-    cpu_context_t* cpu = get_cpu();
+    cpu_context_t* cpu = lapic_timer_calibrate();
     
     // 1. Configure LVT Timer Register
     // Bit 17: 1 for Periodic Mode, 0 for One-Shot

@@ -74,7 +74,6 @@ void lapic_init_ap();
 void lapic_write(uint32_t reg, uint32_t data);
 uint32_t lapic_read(uint32_t reg);
 void lapic_timer_init(uint32_t ms_interval, uint8_t vector);
-void lapic_timer_calibrate();
 
 void lapic_wait_for_delivery();
 void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector);

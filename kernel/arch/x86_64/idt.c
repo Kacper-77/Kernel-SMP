@@ -52,7 +52,7 @@ uint64_t interrupt_dispatch(interrupt_frame_t* frame) {
     if (frame->vector_number < 32) {
         exception_handler(frame);
     } else if (frame->vector_number == 32) {
-        if (get_cpu()->cpu_id == 0) system_uptime_ms += 10;
+        if (get_cpu()->cpu_id == 0) system_uptime_ms += 5;
         lapic_send_eoi();
         
         next_rsp = schedule(frame);

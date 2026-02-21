@@ -33,7 +33,6 @@ void pit_wait_calibration() {
         if (status & 0x80) {
             break;
         }
-        
         __asm__ volatile("pause");
     }
 }

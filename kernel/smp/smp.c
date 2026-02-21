@@ -80,8 +80,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
 
     vmm_enable_pat(); 
     lapic_init_ap();
-    lapic_timer_calibrate(); 
-    lapic_timer_init(10, 32);
+    lapic_timer_init(5, 32);
     sched_init_ap();   
 
     if (g_bi) {

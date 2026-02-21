@@ -177,8 +177,7 @@ void kernel_main_high(BootInfo *bi) {
             lapic_init(v_lapic);
             g_lock_enabled = 1;
 
-            lapic_timer_calibrate();
-            lapic_timer_init(10, 32);
+            lapic_timer_init(5, 32);
 
             ioapic_init(0xFEC00000); 
             ioapic_set_irq(1, 0, 33);
@@ -249,8 +248,8 @@ void kernel_main_high(BootInfo *bi) {
         kprint_hex(i);
         kprint("s...\n");
     }
-    // arch_task_create(task_a);
-    // arch_task_create(task_b);
+    arch_task_create(task_a);
+    arch_task_create(task_b);
 
     kprint("Timer TEST PASSED! Uptime: ");
     kprint_hex(get_uptime_ms());
