@@ -20,7 +20,7 @@ void cpu_init_bsp() {
 
     // 3. Stack
     void* stack = pmm_alloc_frames(4); // 16KB
-    ctx->kernel_stack = (uintptr_t)phys_to_virt((uintptr_t)stack + (4 * 4096));
+    ctx->kernel_stack = (uintptr_t)phys_to_virt((uintptr_t)stack + (4 * PAGE_SIZE));
 
     // 4. GDT and SSE
     gdt_setup_for_cpu(ctx);

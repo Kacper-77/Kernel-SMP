@@ -1,11 +1,14 @@
 #include <elf.h>
 #include <vmm.h>
 #include <pmm.h>
+#include <cpu.h>
 #include <std_funcs.h>
 #include <kmalloc.h>
 #include <serial.h>
 
+//
 // Helper to copy data from ELF buffer to the newly allocated physical frames
+//
 static void elf_copy_segment(page_table_t* pml4_virt, uintptr_t vaddr, void* src, size_t filesz) {
     size_t copied = 0;
     while (copied < filesz) {
@@ -36,9 +39,7 @@ uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data) {
     page_table_t* pml4_virt = (page_table_t*)phys_to_virt(pml4_phys);
     Elf64_Phdr* phdr = (Elf64_Phdr*)((uintptr_t)elf_data + header->e_phoff);
 
-    // uint64_t cr0;
-    // __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    // __asm__ volatile("mov %0, %%cr0" : : "r"(cr0 & ~(1ULL << 16)));
+    disable_wp_cr0();
 
     for (int i = 0; i < header->e_phnum; i++) {
         if (phdr[i].p_type == PT_LOAD) {
@@ -66,7 +67,7 @@ uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data) {
         }
     }
 
-    // __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
+    enable_wp_cr0();
 
     return header->e_entry;
 }

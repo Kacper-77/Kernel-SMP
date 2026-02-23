@@ -1,12 +1,12 @@
 #include <vmm.h>
 #include <pmm.h>
+#include <cpu.h>
 #include <spinlock.h>
 #include <std_funcs.h>
 #include <efi_descriptor.h>
 
 // Default addr mask
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
-
 #define HHDM_OFFSET 0xFFFF800000000000
 
 static spinlock_t vmm_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
@@ -59,8 +59,46 @@ uintptr_t vmm_create_user_pml4() {
     return pml4_phys;
 }
 
+void vmm_destroy_user_pml4(uintptr_t cr3) {
+    page_table_t* pml4 = (page_table_t*)phys_to_virt(cr3);
+
+    // Iterate only user half
+    // !!! FOR NOW SLOW I WILL ADD HELEPER !!!
+    for (int i = 0; i < 256; i++) {
+        if (!(pml4->entries[i] & PTE_PRESENT)) continue;
+
+        page_table_t* pdpt = (page_table_t*)phys_to_virt(
+                pml4->entries[i] & ~0xFFF);
+
+        for (int j = 0; j < 512; j++) {
+            if (!(pdpt->entries[j] & PTE_PRESENT)) continue;
+
+            page_table_t* pd = (page_table_t*)phys_to_virt(pdpt->entries[j] & ~0xFFF);
+
+            for (int k = 0; k < 512; k++) {
+                if (!(pd->entries[k] & PTE_PRESENT)) continue;
+
+                page_table_t* pt = (page_table_t*)phys_to_virt(pd->entries[k] & ~0xFFF);
+
+                for (int l = 0; l < 512; l++) {
+                    if (!(pt->entries[l] & PTE_PRESENT)) continue;
+
+                    uintptr_t phys = pt->entries[l] & ~0xFFF;
+                    pmm_free_frame((void*)phys);
+                }
+                pmm_free_frame((void*)(pd->entries[k] & ~0xFFF));
+            }
+            pmm_free_frame((void*)(pdpt->entries[j] & ~0xFFF));
+        }
+        pmm_free_frame((void*)(pml4->entries[i] & ~0xFFF));
+    }
+
+    // Finally free the PML4 itself
+    pmm_free_frame((void*)cr3);
+}
+
 //
-// Unlocked mapping
+// Unlocked mapping - !!! BOOL !!!
 //
 static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
 
@@ -72,6 +110,8 @@ static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys
     // Level 4 -> Level 3
     if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        if (!new_table) return;
+
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     } else if (flags & PTE_USER) {
@@ -82,6 +122,8 @@ static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys
     // Level 3 -> Level 2
     if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        if (!new_table) return;
+
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     } else if (flags & PTE_USER) {
@@ -92,6 +134,8 @@ static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys
     // Level 2 -> Level 1
     if (!(pd->entries[pd_i] & PTE_PRESENT)) {
         uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
+        if (!new_table) return;
+
         memset(vmm_get_table(new_table), 0, PAGE_SIZE);
         pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
     } else if (flags & PTE_USER) {
@@ -103,7 +147,7 @@ static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys
     
     vmm_invlpg((void*)virt);
 }
-
+// !!! BOOL !!!
 static void _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
     uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
     for (uint64_t i = 0; i < num_pages; i++) {
@@ -294,31 +338,20 @@ void vmm_init(BootInfo* bi) {
     // Ensure the BootInfo structure is accessible after the address space switch
     uintptr_t bi_phys = (uintptr_t)bi;
     uintptr_t bi_virt = phys_to_virt((uintptr_t)bi);
-    _vmm_map_range_unlocked(local_pml4, PAGE_ALIGN_DOWN(bi_virt), PAGE_ALIGN_DOWN(bi_phys), sizeof(BootInfo), PTE_PRESENT);
+    _vmm_map_range_unlocked(local_pml4, PAGE_ALIGN_DOWN(bi_virt), PAGE_ALIGN_DOWN(bi_phys), sizeof(BootInfo),
+     PTE_PRESENT | PTE_WRITABLE | PTE_NX);
 
     kernel_pml4_phys = (uintptr_t)local_pml4;
 
-    // 7. ENABLE NXE IN EFER MSR (No-Execute Enable)
-    __asm__ volatile(
-        "mov $0xC0000080, %%ecx\n"
-        "rdmsr\n"
-        "or $0x800, %%eax\n"
-        "wrmsr\n"
-        ::: "ecx", "eax", "edx"
-    );
+    // 7. ENABLE NXE IN EFER MSR
+    enable_nxe();
 
     // 8. ENABLE PAE IN CR4
-    uint64_t cr4;
-    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
-    cr4 |= (1 << 5);
-    __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
+    enable_pae_cr4();
 
     // 9. TEMPORARILY DISABLE WP IN CR0
     // This allows the kernel to initialize tables without immediate protection faults
-    uint64_t cr0;
-    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 &= ~(1 << 16);
-    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
+    disable_wp_cr0();
 
     // 10. LOAD CR3 AND SWITCH STACK TO HIGHER HALF
     __asm__ volatile(
@@ -335,6 +368,10 @@ void vmm_init(BootInfo* bi) {
 
     // 11. SAFE TO ACCESS GLOBAL VARIABLES NOW
     kernel_pml4 = (page_table_t*)phys_to_virt((uintptr_t)local_pml4);
+
+    // 12. ENABLE WP
+    // After everything is ready
+    enable_wp_cr0();
 }
 
 //

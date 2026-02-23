@@ -71,7 +71,7 @@ typedef struct cpu_context {
     uint32_t lapic_ticks_per_ms;
 
     // Runqueue 
-    spinlock_t rq_lock;             // CPU exclusive lock
+    spinlock_t rq_lock;
     struct task* rq_head;
     struct task* rq_tail;           
     uint64_t rq_count; 
@@ -165,6 +165,37 @@ static inline void cpu_register_context(cpu_context_t* ctx) {
 static inline cpu_context_t* get_cpu_by_id(uint64_t id) {
     if (id >= 32) return NULL;
     return cpu_table[id];
+}
+
+static inline void enable_nxe() {
+    __asm__ volatile(
+        "mov $0xC0000080, %%ecx\n"
+        "rdmsr\n"
+        "or $0x800, %%eax\n"
+        "wrmsr\n"
+        ::: "ecx", "eax", "edx"
+    );
+}
+
+static inline void enable_pae_cr4() {
+    uint64_t cr4;
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1 << 5);
+    __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
+}
+
+static inline void disable_wp_cr0() {
+    uint64_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1 << 16);
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
+}
+
+static inline void enable_wp_cr0() {
+    uint64_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 1 << 16;
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 }
 
 #endif

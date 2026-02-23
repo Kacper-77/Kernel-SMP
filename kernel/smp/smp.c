@@ -62,14 +62,8 @@ static void user_test_task_ap() {
 // "ctx" Pointer to the CPU-specific context structure.
 //
 void kernel_main_ap(cpu_context_t* ctx) {
-    // NXE
-    __asm__ volatile(
-        "mov $0xC0000080, %%ecx\n"
-        "rdmsr\n"
-        "or $0x800, %%eax\n"
-        "wrmsr\n"
-        ::: "ecx", "eax", "edx"
-    );
+    enable_nxe();
+
     cpu_enable_sse(); 
 
     gdt_setup_for_cpu(ctx);
@@ -106,9 +100,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
     __asm__ volatile("sti");
 
     while(1) {
-        sched_reap();
         __asm__ volatile("hlt");
-        sched_yield();
     }
 }
 
@@ -149,7 +141,7 @@ void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id) {
 
     boot_ap(lapic_id, 0x08); // 0x08 -> 0x8000
 
-    // waiting for AP
+    // Waiting for AP
     while(config->trampoline_ready == 0) __asm__("pause");
 }
 
