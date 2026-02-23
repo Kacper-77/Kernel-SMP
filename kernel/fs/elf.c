@@ -53,9 +53,9 @@ uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data) {
             for (uintptr_t vpage = start_page; vpage < end_page; vpage += PAGE_SIZE) {
                 uintptr_t phys = vmm_virtual_to_physical(pml4_virt, vpage);
                 if (phys == 0) {
-                    void* frame = pmm_alloc_frame();
-                    vmm_map(pml4_virt, vpage, (uintptr_t)frame, vmm_flags);
-                    memset((void*)phys_to_virt((uintptr_t)frame), 0, PAGE_SIZE);
+                    uintptr_t frame = (uintptr_t)pmm_alloc_frame();
+                    vmm_map(pml4_virt, vpage, frame, vmm_flags);
+                    memset((void*)phys_to_virt(frame), 0, PAGE_SIZE);
                 } else {
                     vmm_map(pml4_virt, vpage, phys, vmm_flags); 
                 }

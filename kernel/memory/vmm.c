@@ -32,7 +32,7 @@ void vmm_enable_pat() {
 
     uint64_t pat = ((uint64_t)high << 32) | low;
 
-    // Set PAT4 (Write-Combining)
+    // Set PAT4
     pat &= ~(0xFFULL << 32);      
     pat |= (0x01ULL << 32);       
 
@@ -59,16 +59,15 @@ uintptr_t vmm_create_user_pml4() {
     return pml4_phys;
 }
 
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 void vmm_destroy_user_pml4(uintptr_t cr3) {
     page_table_t* pml4 = (page_table_t*)phys_to_virt(cr3);
 
     // Iterate only user half
-    // !!! FOR NOW SLOW I WILL ADD HELEPER !!!
     for (int i = 0; i < 256; i++) {
         if (!(pml4->entries[i] & PTE_PRESENT)) continue;
 
-        page_table_t* pdpt = (page_table_t*)phys_to_virt(
-                pml4->entries[i] & ~0xFFF);
+        page_table_t* pdpt = (page_table_t*)phys_to_virt(pml4->entries[i] & ~0xFFF);
 
         for (int j = 0; j < 512; j++) {
             if (!(pdpt->entries[j] & PTE_PRESENT)) continue;

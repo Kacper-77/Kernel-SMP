@@ -210,12 +210,9 @@ uint64_t schedule(interrupt_frame_t* frame) {
     cpu->tss.rsp0 = (uintptr_t)scheduled_next->stack_base + scheduled_next->stack_size;
     cpu->kernel_stack = cpu->tss.rsp0;
 
-    if (scheduled_next->cr3 != 0) {
-        uint64_t current_cr3 = read_cr3();
-        if (scheduled_next->cr3 != current_cr3) {
+    if (scheduled_next->cr3 != 0 &&
+        scheduled_next->cr3 != read_cr3()) 
             write_cr3(scheduled_next->cr3);
-        }
-    }
 
     // 8. restore irq flags and return stack pointer
     spin_irq_restore(f);
@@ -245,7 +242,7 @@ void task_exit() {
     if (!current) return;
 
     // 2. Lock scheduler
-    uint64_t f __attribute__((unused)) = spin_irq_save();
+    uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
 
     kprint_raw("\n[SCHED] Task ");
@@ -257,6 +254,7 @@ void task_exit() {
     current->cpu_id = (uint64_t)-1; 
 
     spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
 
     // 4. Trigger immediate reschedule via timer interrupt vector
     while(1) {
