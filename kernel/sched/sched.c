@@ -9,7 +9,9 @@
 #include <std_funcs.h>
 
 task_t* root_task = NULL;
+task_t* dead_task_list = NULL;
 spinlock_t sched_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
+spinlock_t dead_lock_  = { .ticket = 0, .current = 0, .last_cpu = -1 };
 
 //
 // The Idle Task: The ultimate fallback for the CPU when no tasks are ready.
@@ -21,7 +23,8 @@ static void idle_task() {
     while (1) {
         if (get_cpu()->cpu_id == 0) {
              sched_reap();
-        }  
+        }
+        for(volatile int i=0; i<500; i++) __asm__ volatile("pause");
         __asm__ volatile("hlt");
         sched_yield();  // Trigger scheduler
     }
@@ -33,14 +36,22 @@ static void idle_task() {
 void enqueue_task(cpu_context_t* cpu, task_t* task) {
     spin_lock(&cpu->rq_lock);
 
+    uint8_t p = task->priority;
+    if (p >= PRIORITY_LEVELS) p = PRIO_NORMAL;
+
     task->sched_next = NULL;
-    if (cpu->rq_tail) {
-        cpu->rq_tail->sched_next = task;
+    if (cpu->rq_tail[p]) {
+        cpu->rq_tail[p]->sched_next = task;
     } else {
-        cpu->rq_head = task;
+        cpu->rq_head[p] = task;
     }
-    cpu->rq_tail = task;
-    cpu->rq_count++;
+    cpu->rq_tail[p] = task;
+    cpu->rq_count[p]++;
+
+    // If task is "homeless", pin it to this CPU for now
+    if (task->cpu_id == (uint64_t)-1) {
+        task->cpu_id = cpu->cpu_id;
+    }
 
     spin_unlock(&cpu->rq_lock);
 }
@@ -48,15 +59,20 @@ void enqueue_task(cpu_context_t* cpu, task_t* task) {
 task_t* dequeue_task(cpu_context_t* cpu) {
     spin_lock(&cpu->rq_lock);
 
-    task_t* t = cpu->rq_head;
-    if (t) {
-        cpu->rq_head = t->sched_next;
-        if (!cpu->rq_head) cpu->rq_tail = NULL;
-        cpu->rq_count--;
+    for (int p = 0; p < PRIORITY_LEVELS - 1; p++) {
+        if (cpu->rq_head[p]) {
+            task_t* t = cpu->rq_head[p];
+            cpu->rq_head[p] = t->sched_next;
+            if (!cpu->rq_head[p]) cpu->rq_tail[p] = NULL;
+            cpu->rq_count[p]--;
+
+            spin_unlock(&cpu->rq_lock);
+            return t;
+        }
     }
 
     spin_unlock(&cpu->rq_lock);
-    return t;
+    return NULL;
 }
 
 static void sched_update_sleepers() {
@@ -113,7 +129,43 @@ static task_t* create_idle_struct(void (*entry)(void)) {
     t->tid        = 1;  // TID 1 reserved for Idle tasks
     t->state      = TASK_RUNNING;
     t->cpu_id     = get_cpu()->cpu_id;
+    t->priority   = PRIO_IDLE;
     return t;
+}
+
+//
+// Attempts to steal a migratable user task (TID >= 10) from another CPU's 
+// runqueue to balance load. Respects priority levels and uses trylock 
+// to avoid deadlocks during synchronization.
+//
+static task_t* steal_task_from_cpu(cpu_context_t* other) {
+    if (!spin_trylock(&other->rq_lock)) return NULL;
+
+    task_t* stolen = NULL;
+    for (int p = 0; p < PRIORITY_LEVELS - 1; p++) {
+        task_t* curr = other->rq_head[p];
+        task_t* prev = NULL;
+
+        while (curr) {
+            if (curr->tid >= 10) {
+                if (prev) prev->sched_next = curr->sched_next;
+                else other->rq_head[p] = curr->sched_next;
+
+                if (other->rq_tail[p] == curr) other->rq_tail[p] = prev;
+                
+                other->rq_count[p]--;
+                curr->sched_next = NULL;
+                stolen = curr;
+                break;
+            }
+            prev = curr;
+            curr = curr->sched_next;
+        }
+        if (stolen) break;
+    }
+
+    spin_unlock(&other->rq_lock);
+    return stolen;
 }
 
 //
@@ -141,80 +193,68 @@ void sched_init() {
 }
 
 //
-// The core Round-Robin scheduler with support for task sleeping and CPU affinity.
-// Saves the context of the interrupted task.
-// Wakes up tasks that have finished their 'msleep'.
-// Selects the next READY task, allowing migration for non-system tasks (TID >= 10).
-// Updates TSS for the next interrupt/syscall and performs a CR3 switch if necessary.
+// Core SMP Multi-level Round-Robin Scheduler.
+// Handles context switching, load balancing via work stealing, and task states.
+// frame is a Pointer to the current interrupt stack frame.
+// returns The stack pointer (RSP) of the next task to run.
 //
 uint64_t schedule(interrupt_frame_t* frame) {
-    // 1. Save IRQ state
     uint64_t f = spin_irq_save();
-
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
 
-    // 2. Wake sleepers and enqueue them
-    // Only BSP: Work stealing takes care of that
+    // Wake up sleeping tasks (BSP only)
     if (cpu->cpu_id == 0) sched_update_sleepers();
 
-    // Save current task context (per-CPU, no global lock needed)
     if (current) {
-    current->rsp = (uintptr_t)frame;
+        current->rsp = (uintptr_t)frame;
+        if (current->state == TASK_RUNNING) {
+            current->state = TASK_READY;
+            enqueue_task(cpu, current); 
+        }
 
-    if (current->state == TASK_RUNNING) {
-        current->state = TASK_READY;
-        enqueue_task(cpu, current); 
+        // Reset affinity for user tasks to allow migration
+        if (current->tid >= 10) {
+            current->cpu_id = (uint64_t)-1;
+        }
     }
 
-    if (current->tid >= 10)
-        current->cpu_id = (uint64_t)-1;
-    }
-
-    // 3. Try to get next task from local runqueue
+    // 1. Fetch task from local runqueue
     task_t* scheduled_next = dequeue_task(cpu);
 
-    // 4. If local empty, try to steal from other CPUs
+    // 2. Load Balancing: Attempt to steal from other cores if idle
     if (!scheduled_next) {
         for (int i = 0; i < 32; i++) {
             cpu_context_t* other = get_cpu_by_id(i);
             if (!other || other == cpu) continue;
 
-            // try to get a task from that cpu
-            spin_lock(&other->rq_lock);
-            task_t* t = other->rq_head;
-            if (t) {
-                other->rq_head = t->sched_next;
-                if (!other->rq_head) other->rq_tail = NULL;
-                other->rq_count--;
-                t->sched_next = NULL;
-            }
-            spin_unlock(&other->rq_lock);
-
-            if (t) {
-                scheduled_next = t;
+            scheduled_next = steal_task_from_cpu(other);
+            
+            if (scheduled_next) {
                 break;
             }
         }
     }
 
-    // 5. Fallback to idle
-    if (!scheduled_next) scheduled_next = cpu->idle_task;
+    // 3. Final fallback
+    if (!scheduled_next) {
+        scheduled_next = cpu->idle_task;
+    }
 
-    // 6. Prepare chosen task
+    // Update task and CPU state
     scheduled_next->state = TASK_RUNNING;
     scheduled_next->cpu_id = cpu->cpu_id;
     cpu->current_task = scheduled_next;
 
-    // 7. Setup kernel stack/TSS and CR3 switch if needed
+    // Update TSS/Kernel stack for next interrupt/syscall
     cpu->tss.rsp0 = (uintptr_t)scheduled_next->stack_base + scheduled_next->stack_size;
     cpu->kernel_stack = cpu->tss.rsp0;
 
-    if (scheduled_next->cr3 != 0 &&
-        scheduled_next->cr3 != read_cr3()) 
-            write_cr3(scheduled_next->cr3);
+    // Address space switch if necessary
+    if (scheduled_next->cr3 != 0 && scheduled_next->cr3 != read_cr3()) {
+        write_cr3(scheduled_next->cr3);
+    }
 
-    // 8. restore irq flags and return stack pointer
     spin_irq_restore(f);
     return scheduled_next->rsp;
 }
@@ -232,9 +272,10 @@ void sched_init_ap() {
 }
 
 //
-// Gracefully terminates the current task. Marks the task as a ZOMBIE,
-// allowing its memory to be safely reclaimed by the Reaper on a different
-// execution context. Triggers an immediate reschedule.
+// Gracefully terminates the current task. Marks it as a ZOMBIE and 
+// moves it to the 'dead_task_list' for asynchronous cleanup.
+// This allows the task to die quickly while the actual memory 
+// deallocation is offloaded to the Reaper (CPU 0).
 //
 void task_exit() {
     // 1. Get current task
@@ -243,62 +284,82 @@ void task_exit() {
 
     // 2. Lock scheduler
     uint64_t f = spin_irq_save();
-    spin_lock(&sched_lock_);
+    spin_lock(&dead_lock_);
 
     kprint_raw("\n[SCHED] Task ");
     kprint_hex_raw(current->tid);
     kprint_raw(" is now a ZOMBIE.\n");
 
-    // 3. Change state ("Reaper" can kill it later)
+    // 3. Add to global "cleanup later" list 
     current->state = TASK_ZOMBIE;
-    current->cpu_id = (uint64_t)-1; 
+    current->cpu_id = (uint64_t)-1;
+    current->sched_next = dead_task_list;
+    dead_task_list = current;
 
-    spin_unlock(&sched_lock_);
+    spin_unlock(&dead_lock_);
     spin_irq_restore(f);
 
     // 4. Trigger immediate reschedule via timer interrupt vector
-    while(1) {
-        sched_yield(); 
-        __asm__ volatile("hlt");
-    }
+    while(1) sched_yield(); 
 }
 
 //
-// The Kernel Reaper: Scans the global task list to physically free memory
-// associated with terminated (ZOMBIE) tasks. This ensures that kernel stacks 
-// and task structures are recycled.
+// The Kernel Reaper: Executed by the Idle task (typically on CPU 0).
+// It drains the 'dead_task_list', unlinks tasks from the global 
+// 'root_task' list, and physically frees their kernel stacks and structures.
 //
 void sched_reap() {
-    // 1. Lock before cleaning
+    if (!dead_task_list) return;
+
+    // 1. Swap global list with local list
+    // And set dead_task_list as NULL
     uint64_t f = spin_irq_save();
-    spin_lock(&sched_lock_);
+    spin_lock(&dead_lock_);
 
-    // 2. Extract key data about tasks
-    task_t* prev = root_task;
-    task_t* current = root_task->next;
+    task_t* to_clean = dead_task_list;
+    dead_task_list   = NULL;
 
-    // 3. Go through whole loop 
-    while (current != root_task) {
-        if (current->state == TASK_ZOMBIE) {
-            prev->next = current->next;
-            task_t* to_free = current;
-            current = current->next;
-
-            kprint_raw("[REAPER] Cleaning up TID ");
-            kprint_hex_raw(to_free->tid);
-            kprint_raw("\n");
-
-            kfree((void*)to_free->stack_base); 
-            kfree(to_free);                    
-            
-            continue;
-        }
-        
-        prev = current;
-        current = current->next;
-    }
-    spin_unlock(&sched_lock_);
+    spin_unlock(&dead_lock_);
     spin_irq_restore(f);
+
+    // 2. Iterate through global list and clean it
+    // Repeat that until to_clean != NULL
+    while (to_clean) {
+        task_t* next = to_clean->sched_next;
+
+        spin_lock(&sched_lock_);
+
+        task_t* curr = root_task;
+        task_t* prev = NULL;
+
+        // Until current element != element from "to_clean"
+        do {
+            if (curr->next == to_clean) {
+                prev = curr;
+                break;
+            }
+            curr = curr->next;
+        } while (curr != root_task);
+
+        if (prev) {
+            prev->next = to_clean->next;
+
+            if (to_clean == root_task) {
+                root_task = prev;
+            }
+        }
+
+        spin_unlock(&sched_lock_);
+
+        kprint_raw("[REAPER] Cleaning up TID ");
+        kprint_hex_raw(to_clean->tid);
+        kprint_raw("\n");
+
+        // 3. Finally free space and update "to_clean" list
+        kfree((void*)to_clean->stack_base);
+        kfree(to_clean);
+        to_clean = next;
+    }
 }
 
 task_t* sched_get_current() {

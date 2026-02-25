@@ -7,6 +7,11 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 
+#define PRIORITY_LEVELS 4
+#define PRIO_HIGH   0
+#define PRIO_NORMAL 1
+#define PRIO_LOW    2
+#define PRIO_IDLE   3
 
 typedef struct tss {
     uint32_t reserved0;
@@ -72,9 +77,9 @@ typedef struct cpu_context {
 
     // Runqueue 
     spinlock_t rq_lock;
-    struct task* rq_head;
-    struct task* rq_tail;           
-    uint64_t rq_count; 
+    struct task* rq_head[PRIORITY_LEVELS];
+    struct task* rq_tail[PRIORITY_LEVELS];
+    uint32_t rq_count[PRIORITY_LEVELS];
 } cpu_context_t;
 
 extern cpu_context_t* cpu_table[32];
@@ -145,9 +150,11 @@ static inline void write_msr(uint32_t msr, uint64_t value) {
 
 static inline void cpu_init_context(cpu_context_t* ctx) {
     ctx->self = ctx;
-    ctx->rq_head = NULL;
-    ctx->rq_tail = NULL;
-    ctx->rq_count = 0;
+    for (int i = 0; i < PRIORITY_LEVELS; i++) {
+        ctx->rq_head[i]  = NULL;
+        ctx->rq_tail[i]  = NULL;
+        ctx->rq_count[i] = 0;
+    }
     ctx->rq_lock = (spinlock_t){0};
     uint64_t addr = (uintptr_t)ctx;
     

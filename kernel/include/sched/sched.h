@@ -26,6 +26,7 @@ typedef struct task {
 
     struct task* next;        // Global list for Reaper
     struct task* sched_next;  // Runqueue Per-CPU
+    uint8_t priority;
 
     uint64_t cpu_id;
     uint64_t sleep_until;

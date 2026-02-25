@@ -31,6 +31,7 @@ static task_t* task_alloc_base() {
     t->cpu_id = -1;
     t->state = TASK_READY;
     t->tid = __atomic_fetch_add(&next_tid, 1, __ATOMIC_RELAXED);
+    t->priority = PRIO_NORMAL;
 
     return t;
 }
@@ -47,7 +48,8 @@ static void task_register(task_t* t) {
 
     spin_unlock(&sched_lock_);
     spin_irq_restore(f);
-
+    
+    t->cpu_id = (uint64_t)-1;
     enqueue_task(get_cpu(), t);
 }
 
@@ -60,6 +62,8 @@ static void task_register(task_t* t) {
 task_t* arch_task_create(void (*entry_point)(void)) {
     task_t* t = task_alloc_base();
     if (!t) return NULL;
+
+    t->priority = PRIO_HIGH;
 
     uintptr_t stack_top = (t->stack_base + t->stack_size) & ~0x0FULL;
     

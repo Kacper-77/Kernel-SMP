@@ -44,13 +44,10 @@ static void ap_test_task2() {
 }
 
 static void user_test_task_ap() {
-    volatile int counter = 0;
     char msg[] = "\nRING 3 AP AP AP AP AP\n";
-    while(counter < 5) {
-        u_print(msg);
-        u_sleep(10);
-        counter++;
-    }
+    u_print(msg);
+    
+    u_sleep(10);
     u_exit();
 }
 
@@ -89,7 +86,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
         strcpy(ap_message, "CPU ");
         ap_message[4] = (char)(ctx->cpu_id + '0'); 
         strcpy(ap_message + 5, " ALLOCATED OK\n");
-        kprint(ap_message);
+        kprint_raw(ap_message);
     }
     kfree((void*)ap_message);
 
