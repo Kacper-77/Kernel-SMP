@@ -23,6 +23,7 @@ static void idle_task() {
     while (1) {
         if (get_cpu()->cpu_id == 0) {
              sched_reap();
+             log_flush();
         }
         for(volatile int i=0; i<500; i++) __asm__ volatile("pause");
         __asm__ volatile("hlt");
@@ -286,9 +287,9 @@ void task_exit() {
     uint64_t f = spin_irq_save();
     spin_lock(&dead_lock_);
 
-    kprint_raw("\n[SCHED] Task ");
-    kprint_hex_raw(current->tid);
-    kprint_raw(" is now a ZOMBIE.\n");
+    kprint("\n[SCHED] Task ");
+    kprint_hex(current->tid);
+    kprint(" is now a ZOMBIE.\n");
 
     // 3. Add to global "cleanup later" list 
     current->state = TASK_ZOMBIE;
@@ -351,9 +352,9 @@ void sched_reap() {
 
         spin_unlock(&sched_lock_);
 
-        kprint_raw("[REAPER] Cleaning up TID ");
-        kprint_hex_raw(to_clean->tid);
-        kprint_raw("\n");
+        kprint("[REAPER] Cleaning up TID ");
+        kprint_hex(to_clean->tid);
+        kprint("\n");
 
         // 3. Finally free space and update "to_clean" list
         kfree((void*)to_clean->stack_base);

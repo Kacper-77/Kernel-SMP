@@ -86,7 +86,7 @@ void kernel_main_ap(cpu_context_t* ctx) {
         strcpy(ap_message, "CPU ");
         ap_message[4] = (char)(ctx->cpu_id + '0'); 
         strcpy(ap_message + 5, " ALLOCATED OK\n");
-        kprint_raw(ap_message);
+        kprint(ap_message);
     }
     kfree((void*)ap_message);
 

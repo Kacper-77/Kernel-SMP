@@ -10,5 +10,6 @@ void kprint(const char* s);
 void kprint_hex(uint64_t value);
 void kprint_hex_raw(uint64_t value);
 void kprint_raw(const char* s);
+void log_flush();
 
 #endif

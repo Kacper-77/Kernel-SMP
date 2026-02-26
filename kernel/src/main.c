@@ -122,7 +122,6 @@ void kernel_main(BootInfo *bi) {
 
 // High-half entry point
 void kernel_main_high(BootInfo *bi) {
-    kprint("BootInfo pointer: "); kprint_hex((uintptr_t)bi); kprint("\n");
     cpu_init_bsp();
     cpu_init_syscalls();
     init_sys_table();
@@ -259,6 +258,7 @@ void kernel_main_high(BootInfo *bi) {
 
     while(1) {
         sched_reap();
+        log_flush();
         __asm__ volatile("hlt");
         sched_yield();
     }

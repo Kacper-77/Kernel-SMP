@@ -30,25 +30,21 @@ static void kpanic(const char* message) {
 // DIAGNOSTIC
 //
 void kmalloc_dump() {
-    extern spinlock_t kprint_lock_;
-
     uint64_t f = spin_irq_save();
-    spin_lock(&kprint_lock_);
     spin_lock(&heap_lock_); 
 
-    kprint_raw("\n--- DUMP START ---\n");
+    kprint("\n--- DUMP START ---\n");
     m_header_t* curr = heap_start;
     while (curr) {
-        kprint_raw("Block: ");   kprint_hex_raw((uintptr_t)curr);
-        kprint_raw(" | Size: "); kprint_hex_raw(curr->size);
-        kprint_raw(" | Free: "); kprint_raw(curr->is_free ? "YES" : "NO");
-        kprint_raw("\n");
+        kprint("Block: ");   kprint_hex((uintptr_t)curr);
+        kprint(" | Size: "); kprint_hex(curr->size);
+        kprint(" | Free: "); kprint(curr->is_free ? "YES" : "NO");
+        kprint("\n");
         curr = curr->next;
     }
-    kprint_raw("--- DUMP END ---\n");
+    kprint("--- DUMP END ---\n");
 
     spin_unlock(&heap_lock_);
-    spin_unlock(&kprint_lock_);
     spin_irq_restore(f);
 }
 
