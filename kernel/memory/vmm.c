@@ -1,6 +1,7 @@
 #include <vmm.h>
 #include <pmm.h>
 #include <cpu.h>
+#include <panic.h>
 #include <spinlock.h>
 #include <std_funcs.h>
 #include <efi_descriptor.h>
@@ -59,7 +60,6 @@ uintptr_t vmm_create_user_pml4() {
     return pml4_phys;
 }
 
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 void vmm_destroy_user_pml4(uintptr_t cr3) {
     page_table_t* pml4 = (page_table_t*)phys_to_virt(cr3);
 
@@ -97,61 +97,83 @@ void vmm_destroy_user_pml4(uintptr_t cr3) {
 }
 
 //
-// Unlocked mapping - !!! BOOL !!!
+// UNLOCKED SECTION
 //
-static void _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
 
+static void _vmm_unmap_unlocked(page_table_t* pml4, uintptr_t virt) {
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
     uint64_t pd_i   = PD_IDX(virt);
     uint64_t pt_i   = PT_IDX(virt);
 
-    // Level 4 -> Level 3
-    if (!(pml4->entries[pml4_i] & PTE_PRESENT)) {
-        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
-        if (!new_table) return;
-
-        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pml4->entries[pml4_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
-    } else if (flags & PTE_USER) {
-        pml4->entries[pml4_i] |= PTE_USER;
-    }
+    if (!(pml4->entries[pml4_i] & PTE_PRESENT)) return;
     page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
 
-    // Level 3 -> Level 2
-    if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) {
-        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
-        if (!new_table) return;
-
-        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pdpt->entries[pdpt_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
-    } else if (flags & PTE_USER) {
-        pdpt->entries[pdpt_i] |= PTE_USER;
-    }
+    if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) return;
     page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
 
-    // Level 2 -> Level 1
-    if (!(pd->entries[pd_i] & PTE_PRESENT)) {
-        uintptr_t new_table = (uintptr_t)pmm_alloc_frame();
-        if (!new_table) return;
-
-        memset(vmm_get_table(new_table), 0, PAGE_SIZE);
-        pd->entries[pd_i] = (new_table & VMM_ADDR_MASK) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
-    } else if (flags & PTE_USER) {
-        pd->entries[pd_i] |= PTE_USER;
-    }
+    if (!(pd->entries[pd_i] & PTE_PRESENT)) return;
     page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
 
-    pt->entries[pt_i] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
-    
+    pt->entries[pt_i] = 0;
     vmm_invlpg((void*)virt);
 }
-// !!! BOOL !!!
-static void _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
+
+void _vmm_unmap_range_unlocked(page_table_t* pml4, uintptr_t virt, uint64_t size) {
     uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
     for (uint64_t i = 0; i < num_pages; i++) {
-        _vmm_map_unlocked(pml4, virt + (i * PAGE_SIZE), phys + (i * PAGE_SIZE), flags);
+        _vmm_unmap_unlocked(pml4, virt + (i * PAGE_SIZE));
     }
+}
+
+static bool _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
+    uint64_t indices[4] = {
+        PML4_IDX(virt),
+        PDPT_IDX(virt),
+        PD_IDX(virt),
+        PT_IDX(virt)
+    };
+
+    page_table_t* current_table = pml4;
+
+    for (int level = 0; level < 3; level++) {
+        uint64_t entry = current_table->entries[indices[level]];
+        
+        if (!(entry & PTE_PRESENT)) {
+            uintptr_t new_table_phys = (uintptr_t)pmm_alloc_frame();
+            if (!new_table_phys) return false;
+
+            page_table_t* new_table_virt = vmm_get_table(new_table_phys);
+            memset(new_table_virt, 0, PAGE_SIZE);
+
+            current_table->entries[indices[level]] = (new_table_phys & VMM_ADDR_MASK) 
+                                                     | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+        } else {
+            if (flags & PTE_USER) current_table->entries[indices[level]] |= PTE_USER;
+            if (flags & PTE_WRITABLE) current_table->entries[indices[level]] |= PTE_WRITABLE;
+        }
+        
+        current_table = vmm_get_table(current_table->entries[indices[level]] & VMM_ADDR_MASK);
+    }
+
+    current_table->entries[indices[3]] = (phys & VMM_ADDR_MASK) | flags | PTE_PRESENT;
+    vmm_invlpg((void*)virt);
+    
+    return true;
+}
+
+static bool _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
+    uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    for (uint64_t i = 0; i < num_pages; i++) {
+        if(!_vmm_map_unlocked(pml4, virt + (i * PAGE_SIZE), phys + (i * PAGE_SIZE), flags)) {
+            if (i > 0) {
+                _vmm_unmap_range_unlocked(pml4, virt, i* PAGE_SIZE);
+            }
+            return false;
+        }
+    }
+    return true;
 }
 
 //
@@ -162,10 +184,38 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
 
-    _vmm_map_unlocked(pml4, virt, phys, flags);
+    bool success = _vmm_map_unlocked(pml4, virt, phys, flags);
 
     spin_unlock(&vmm_lock_);
     spin_irq_restore(f);
+
+    if (!success) {
+        if (virt >= HHDM_OFFSET) {
+            panic("VMM: Critical kernel mapping failed! (Out of memory for page tables)");
+        }
+        return;
+    }
+}
+
+//
+// Maps a contiguous range of virtual pages to a contiguous range of physical frames.
+// Automatically handles TLB invalidation for the entire range.
+//
+void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
+    uint64_t f = spin_irq_save();
+    spin_lock(&vmm_lock_);
+    
+    bool success = _vmm_map_range_unlocked(pml4, virt, phys, size, flags);
+
+    spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
+
+    if (!success) {
+        if (virt >= HHDM_OFFSET) {
+            panic("VMM: Critical kernel mapping failed! (Out of memory for page tables)");
+        }
+        return;
+    }
 }
 
 // 2MB - !!! WILL BE CHANGED !!!
@@ -246,20 +296,6 @@ uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt) {
 //
 uintptr_t phys_to_virt(uintptr_t phys) {
     return phys + HHDM_OFFSET;
-}
-
-//
-// Maps a contiguous range of virtual pages to a contiguous range of physical frames.
-// Automatically handles TLB invalidation for the entire range.
-//
-void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
-    uint64_t f = spin_irq_save();
-    spin_lock(&vmm_lock_);
-
-    _vmm_map_range_unlocked(pml4, virt, phys, size, flags);
-
-    spin_unlock(&vmm_lock_);
-    spin_irq_restore(f);
 }
 
 //
