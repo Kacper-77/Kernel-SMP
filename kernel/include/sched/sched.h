@@ -30,7 +30,7 @@ typedef struct task {
 
     uint64_t cpu_id;
     uint64_t sleep_until;
-} __attribute__((packed)) task_t;
+} __attribute__((aligned(64))) task_t;
 
 void sched_init();
 void sched_init_ap();
