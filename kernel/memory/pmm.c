@@ -111,21 +111,22 @@ void* pmm_alloc_frame() {
 
     // Get current CPU context
     cpu_context_t* cpu = get_cpu();
-    // If not we use default value
+    // If not, use default value
     uint64_t start_index = cpu ? cpu->pmm_last_index : 0;
 
     for (uint64_t i = start_index; i < bitmap_size; i++) {
         if (bitmap[i] == 0xFF) continue;
 
-        for (int b = 0; b < 8; b++) {
-            if (!(bitmap[i] & (1 << b))) {
+        // __builtin_ctz (Count Trailing Zeros), finding first '0'
+        uint8_t free_bits = ~bitmap[i];
+        if (free_bits) {
+            int b = __builtin_ctz(free_bits);
+            if (b < 8) {
                 uint64_t frame_index = i * 8 + b;
                 uint64_t frame_addr = frame_index * PAGE_SIZE;
-
-                if (frame_addr == 0) continue; 
+                if (frame_addr == 0) continue;
 
                 bitmap[i] |= (1 << b);
-                
                 if (cpu) cpu->pmm_last_index = i;
 
                 spin_unlock(&pmm_lock_);
@@ -152,32 +153,44 @@ void* pmm_alloc_frames(size_t count) {
     uint64_t f = spin_irq_save();
     spin_lock(&pmm_lock_);
 
-    uint64_t total_bits = bitmap_size * 8;
+    uint64_t* bitmap64 = (uint64_t*)bitmap;
+    uint64_t num_qwords = bitmap_size / 8;
 
-    for (uint64_t i = 0; i < total_bits - count; i++) {
-        uint64_t free_found = 0;
+    for (uint64_t i = 0; i < num_qwords; i++) {
+        // Skip 64 frames at once if the entire QWORD is fully occupied.
+        // This significantly reduces lock contention in SMP environments.
+        if (bitmap64[i] == 0xFFFFFFFFFFFFFFFF) continue;
 
-        for (uint64_t j = 0; j < count; j++) {
-            uint64_t bit_idx = i + j;
-            if (!(bitmap[bit_idx / 8] & (1 << (bit_idx % 8)))) {
-                free_found++;
-            } else {
-                break;
-            }
-        }
+        // Checking bits inside this QWORD
+        for (int b = 0; b < 64; b++) {
+            uint64_t start_bit_idx = i * 64 + b;
+            uint64_t free_found = 0;
 
-        if (free_found == count) {
+            // Looking for free frames
             for (uint64_t j = 0; j < count; j++) {
-                uint64_t bit_idx = i + j;
-                bitmap[bit_idx / 8] |= (1 << (bit_idx % 8));
+                uint64_t current_bit = start_bit_idx + j;
+                if (current_bit >= bitmap_size * 8) break;
+
+                if (!(bitmap[current_bit / 8] & (1 << (current_bit % 8)))) {
+                    free_found++;
+                } else {
+                    break;
+                }
             }
 
-            uint64_t phys_addr = i * PAGE_SIZE;
+            if (free_found == count) {
+                // Success 
+                for (uint64_t j = 0; j < count; j++) {
+                    uint64_t target_bit = start_bit_idx + j;
+                    bitmap[target_bit / 8] |= (1 << (target_bit % 8));
+                }
 
-            spin_unlock(&pmm_lock_);
-            spin_irq_restore(f);
-
-            return (void*)phys_addr;
+                uint64_t phys_addr = start_bit_idx * PAGE_SIZE;
+                
+                spin_unlock(&pmm_lock_);
+                spin_irq_restore(f);
+                return (void*)phys_addr;
+            }
         }
     }
 
