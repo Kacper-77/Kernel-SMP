@@ -66,10 +66,7 @@ void i8042_init() {
     // 3. Self-test
     i8042_write_command(I8042_CMD_SELF_TEST);
     uint8_t res = i8042_read_data();
-    if (res != 0x55) {
-        kprint("i8042: Self-test FAILED!\n");  // TO DELETE IN FUTURE
-        return;
-    }
+    if (res != 0x55) return;
 
     // 4. Enable interrupts for P1 (Keyboard)
     // Read bits -> Modify -> Save

@@ -21,18 +21,15 @@ void ioapic_set_irq(uint8_t pin, uint8_t apic_id, uint8_t vector) {
     uint32_t low_index = 0x10 + (pin * 2);
     uint32_t high_index = 0x11 + (pin * 2);
 
-    ioapic_write(high_index, (uint32_t)apic_id << 24);
-    ioapic_write(low_index, vector & ~(1 << 16)); 
+    ioapic_write(low_index, vector & ~(1 << 16));
+    ioapic_write(high_index, (uint32_t)apic_id << 24); 
 }
 
 void ioapic_init(uintptr_t phys_addr) {
     uintptr_t virt_addr = phys_to_virt(phys_addr);
     ioapic_base = (uint32_t*)virt_addr;
 
-    vmm_map(vmm_get_pml4(), virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX | PTE_PCD); 
-
-    kprint("IOAPIC: Mapped "); kprint_hex(phys_addr); 
-    kprint(" to "); kprint_hex(virt_addr); kprint("\n");
+    vmm_map(vmm_get_pml4(), virt_addr, phys_addr, PTE_PRESENT | PTE_WRITABLE | PTE_NX | PTE_PCD);
 
     uint32_t ver_reg = ioapic_read(0x01);
     uint32_t max_entries = ((ver_reg >> 16) & 0xFF) + 1;
