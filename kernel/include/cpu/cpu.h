@@ -205,4 +205,13 @@ static inline void enable_wp_cr0() {
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 }
 
+//
+// TLB flush
+//
+static inline void cpu_flush_tlb() {
+    uintptr_t cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+    __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+}
+
 #endif

@@ -5,6 +5,7 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 #include <efi_descriptor.h>
+#include <apic.h>
 
 // Default addr mask
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
@@ -21,6 +22,11 @@ extern uint8_t _kernel_end[];
 extern uint8_t _text_start[], _text_end[];
 extern uint8_t _rodata_start[], _rodata_end[];
 extern uint8_t _data_start[], _data_end[];
+
+static void sync_tlb() {
+    lapic_broadcast_ipi(IPI_VECTOR_TEST);
+    lapic_wait_for_delivery();
+}
 
 //
 // Configures the Page Attribute Table (PAT) MSR to define 
@@ -60,46 +66,61 @@ uintptr_t vmm_create_user_pml4() {
     return pml4_phys;
 }
 
-void vmm_destroy_user_pml4(uintptr_t cr3) {
+void vmm_destroy_user_pml4(uintptr_t cr3, bool free_frames) {
     page_table_t* pml4 = (page_table_t*)phys_to_virt(cr3);
 
-    // Iterate only user half
+    // We only iterate through the lower half (user space, first 256 entries)
     for (int i = 0; i < 256; i++) {
         if (!(pml4->entries[i] & PTE_PRESENT)) continue;
-
-        page_table_t* pdpt = (page_table_t*)phys_to_virt(pml4->entries[i] & ~0xFFF);
+        page_table_t* pdpt = (page_table_t*)phys_to_virt(pml4->entries[i] & VMM_ADDR_MASK);
 
         for (int j = 0; j < 512; j++) {
             if (!(pdpt->entries[j] & PTE_PRESENT)) continue;
+            
+            // Skip if it's a 1GB Huge Page (PS bit set in PDPT)
+            if (pdpt->entries[j] & (1 << 7)) {
+                if (free_frames) pmm_free_frame((void*)(pdpt->entries[j] & VMM_ADDR_MASK));
+                continue;
+            }
 
-            page_table_t* pd = (page_table_t*)phys_to_virt(pdpt->entries[j] & ~0xFFF);
+            page_table_t* pd = (page_table_t*)phys_to_virt(pdpt->entries[j] & VMM_ADDR_MASK);
 
             for (int k = 0; k < 512; k++) {
                 if (!(pd->entries[k] & PTE_PRESENT)) continue;
 
-                page_table_t* pt = (page_table_t*)phys_to_virt(pd->entries[k] & ~0xFFF);
-
-                for (int l = 0; l < 512; l++) {
-                    if (!(pt->entries[l] & PTE_PRESENT)) continue;
-
-                    uintptr_t phys = pt->entries[l] & ~0xFFF;
-                    pmm_free_frame((void*)phys);
+                // Handle 2MB Huge Pages: free the frame and don't descend to PT level
+                if (pd->entries[k] & (1 << 7)) {
+                    if (free_frames) pmm_free_frame((void*)(pd->entries[k] & VMM_ADDR_MASK));
+                    continue;
                 }
-                pmm_free_frame((void*)(pd->entries[k] & ~0xFFF));
-            }
-            pmm_free_frame((void*)(pdpt->entries[j] & ~0xFFF));
-        }
-        pmm_free_frame((void*)(pml4->entries[i] & ~0xFFF));
-    }
 
-    // Finally free the PML4 itself
+                page_table_t* pt = (page_table_t*)phys_to_virt(pd->entries[k] & VMM_ADDR_MASK);
+
+                // Free the actual physical data frames if requested
+                if (free_frames) {
+                    for (int l = 0; l < 512; l++) {
+                        if (pt->entries[l] & PTE_PRESENT) {
+                            pmm_free_frame((void*)(pt->entries[l] & VMM_ADDR_MASK));
+                        }
+                    }
+                }
+                // Free the Page Table (PT) frame itself
+                pmm_free_frame((void*)(pd->entries[k] & VMM_ADDR_MASK));
+            }
+            // Free the Page Directory (PD) frame
+            pmm_free_frame((void*)(pdpt->entries[j] & VMM_ADDR_MASK));
+        }
+        // Free the Page Directory Pointer Table (PDPT) frame
+        pmm_free_frame((void*)(pml4->entries[i] & VMM_ADDR_MASK));
+    }
+    // Finally, free the PML4 frame
     pmm_free_frame((void*)cr3);
+    sync_tlb(); // Flush TLB
 }
 
 //
 // UNLOCKED SECTION
 //
-
 static void _vmm_unmap_unlocked(page_table_t* pml4, uintptr_t virt) {
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -325,11 +346,15 @@ void vmm_init(BootInfo* bi) {
     for (uint64_t offset = 0; offset < total_map_size; offset += desc_size) {
         EFI_MEMORY_DESCRIPTOR* desc = (EFI_MEMORY_DESCRIPTOR*)(map_ptr + offset);
 
-        if (desc->type != 5 && desc->num_pages > 0) {
+        if (desc->type != 0 && desc->num_pages > 0) {
             uint64_t phys_start = desc->physical_start;
             uint64_t size = desc->num_pages * 4096;
 
-            _vmm_map_range_unlocked(local_pml4, phys_start + HHDM_OFFSET, phys_start, size, PTE_PRESENT | PTE_WRITABLE);
+            _vmm_map_range_unlocked(local_pml4, 
+                                    phys_start + HHDM_OFFSET, 
+                                    phys_start, 
+                                    size, 
+                                    PTE_PRESENT | PTE_WRITABLE);
         }
     }
 
@@ -434,15 +459,21 @@ void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
     vmm_invlpg((void*)virt);
 
 done:
+    sync_tlb(); // Flush TLB
     spin_unlock(&vmm_lock_);
     spin_irq_restore(f);
 }
 
 void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {
-    uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-    for (uint64_t i = 0; i < num_pages; i++) {
-        vmm_unmap(pml4, virt + (i * PAGE_SIZE));
-    }
+    uint64_t f = spin_irq_save();
+    spin_lock(&vmm_lock_);
+
+    _vmm_unmap_range_unlocked(pml4, virt, size);
+
+    sync_tlb();  // Flush TLB
+
+    spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
 }
 
 //

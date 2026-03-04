@@ -60,6 +60,8 @@ uint64_t interrupt_dispatch(interrupt_frame_t* frame) {
         ps2_keyboard_handler();
         lapic_send_eoi();
     } else if (frame->vector_number == IPI_VECTOR_TEST) {
+        // Flush TLB
+        cpu_flush_tlb();
         lapic_send_eoi();
     } else if (frame->vector_number == IPI_VECTOR_HALT) {
         __asm__ volatile("cli");
