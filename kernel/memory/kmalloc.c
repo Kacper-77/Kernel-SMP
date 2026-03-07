@@ -4,27 +4,14 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 #include <serial.h>
+#include <slab.h>
+#include <panic.h>
 
 #define KMALLOC_MAGIC 0xCAFEBABE
 #define HEAP_MIN_BLOCK_SIZE 16
 
 static spinlock_t heap_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 static m_header_t* heap_start = NULL;
-
-//
-// Helper AND LOGS
-//
-static size_t align(size_t size) {
-    return (size + 15) & ~15;
-}
-
-static void kpanic(const char* message) {
-    kprint("\n!!! KERNEL PANIC !!!\n");
-    kprint(message);
-    kprint("\nSystem halted.");
-    __asm__ volatile("cli");
-    for (;;) { __asm__ volatile("hlt"); }
-}
 
 //
 // DIAGNOSTIC
@@ -52,6 +39,7 @@ void kmalloc_dump() {
 // Initializes the kernel heap by allocating the first physical frame.
 // Sets up the initial free block header and protects the operation with a spinlock
 // to ensure BSP/AP synchronization during early boot.
+// SLAB included.
 //
 void kmalloc_init() {
     void* first_frame = pmm_alloc_frame();
@@ -69,18 +57,28 @@ void kmalloc_init() {
     heap_start->is_free = 1;
     heap_start->next = NULL;
     heap_start->prev = NULL;
+
+    slab_init();  // SLAB initialization
 }
 
 //
-// Allocates a block of kernel memory using the First Fit algorithm.
-// If no suitable free block is found, it automatically expands the heap 
-// by requesting new frames from the Physical Memory Manager (PMM).
-// Includes block splitting logic to minimize internal fragmentation.
+// Hybrid allocator: 
+// - Routes small requests (<=2048B) to the SLAB allocator.
+// - Uses First-Fit with block splitting for larger heap allocations.
 //
 void* kmalloc(size_t size) {
     if (size == 0) return NULL;
 
-    size = align(size);
+    if (size <= 2048) {
+        void* ptr = slab_alloc(size);
+        if (ptr) {
+            memset(ptr, 0, size);
+            return ptr;
+        }
+    }
+    
+    size = (size + 15) & ~15;  // Align
+
     uint64_t f = spin_irq_save();
     spin_lock(&heap_lock_);
 
@@ -175,6 +173,13 @@ void* kmalloc(size_t size) {
 //
 void kfree(void* ptr) {
     if (!ptr) return;
+
+    slab_t* slab_header = (slab_t*)((uintptr_t)ptr & ~0xFFF);
+
+    if (slab_header->magic == SLAB_MAGIC) {
+        slab_free(ptr);
+        return;
+    }
 
     // 1. Get header
     m_header_t* header = (m_header_t*)((uintptr_t)ptr - sizeof(m_header_t));

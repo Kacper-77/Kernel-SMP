@@ -134,9 +134,9 @@ void kernel_main_high(BootInfo *bi) {
 
     kprint("Starting Coalescing Test\n");
 
-    void* t1 = kmalloc(100);
-    void* t2 = kmalloc(100);
-    void* t3 = kmalloc(100);
+    void* t1 = kmalloc(3000);
+    void* t2 = kmalloc(4050);
+    void* t3 = kmalloc(5500);
 
     kprint("t1: "); kprint_hex((uintptr_t)t1); kprint("\n");
     kprint("t2: "); kprint_hex((uintptr_t)t2); kprint("\n");
@@ -145,7 +145,7 @@ void kernel_main_high(BootInfo *bi) {
     kfree(t1);
     kfree(t2);
     
-    void* t4 = kmalloc(200);
+    void* t4 = kmalloc(4500);
     kprint("t4 (should reuse t1 space): "); kprint_hex((uintptr_t)t4); kprint("\n");
 
     if (t4 == t1) {

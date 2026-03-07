@@ -31,3 +31,11 @@ void panic(const char* message) {
         __asm__ volatile("hlt");
     }
 }
+
+void kpanic(const char* message) {
+    kprint("\n!!! KERNEL PANIC !!!\n");
+    kprint(message);
+    kprint("\nSystem halted.");
+    __asm__ volatile("cli");
+    for (;;) { __asm__ volatile("hlt"); }
+}

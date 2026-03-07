@@ -8,6 +8,9 @@
 static slab_cache_t kmalloc_caches[NUM_KMALLOC_CACHES];
 static size_t cache_sizes[] = { 16, 32, 64, 128, 256, 512, 1024, 2048 };
 
+//
+// Internal Helpers
+//
 static void slab_list_remove(slab_t** list, slab_t* slab) {
     if (slab->prev) slab->prev->next = slab->next;
     if (slab->next) slab->next->prev = slab->prev;
@@ -22,6 +25,10 @@ static void slab_list_push(slab_t** list, slab_t* slab) {
     *list = slab;
 }
 
+//
+// Allocates a new physical frame, sets up the slab header, 
+// and carves it into equal-sized objects linked in a free list.
+//
 void slab_grow(slab_cache_t* cache) {
     void* frame = pmm_alloc_frame();
     uintptr_t virt = phys_to_virt((uintptr_t)frame);
@@ -72,6 +79,10 @@ void* slab_alloc(size_t size) {
     return NULL;  // If to big, kmalloc will do it itself
 }
 
+//
+// Uses page-alignment mask to locate the slab_t header 
+// at the beginning of the 4KB page.
+//
 void slab_free(void* ptr) {
     if (!ptr) return;
 
@@ -121,6 +132,7 @@ void* slab_cache_alloc(slab_cache_t* cache) {
 }
 
 void slab_cache_free(slab_cache_t* cache, void* ptr) {
+    // Get page with "to free" object 
     slab_t* slab = (slab_t*)((uintptr_t)ptr & ~0xFFF); // Align
 
     uint64_t f = spin_irq_save();
@@ -132,7 +144,7 @@ void slab_cache_free(slab_cache_t* cache, void* ptr) {
     slab->free_list = obj;
     slab->free_count++;
 
-    // Manage page list
+    // Move slab to appropriate list based on occupancy
     size_t max_objs = (4096 - sizeof(slab_t)) / cache->obj_size;
 
     if (slab->free_count == 1) {

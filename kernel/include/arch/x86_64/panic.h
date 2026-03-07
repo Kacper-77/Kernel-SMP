@@ -2,6 +2,7 @@
 #define PANIC_H
 
 void panic(const char* message);
+void kpanic(const char* message);
 void smp_halt_others(void);
 
 #endif
