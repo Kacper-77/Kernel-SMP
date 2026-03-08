@@ -14,7 +14,7 @@ typedef struct slab_obj {
 typedef struct slab {
     uint32_t magic;
     struct slab_cache* parent_cache;
-    slab_obj_t* free_list;      // List of free inside this page
+    slab_obj_t* free_list;      // List of free objects inside this page
     size_t free_count;          // How much free left
     struct slab* next;
     struct slab* prev;

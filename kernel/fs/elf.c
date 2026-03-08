@@ -32,17 +32,29 @@ static void elf_copy_segment(page_table_t* pml4_virt, uintptr_t vaddr, void* src
     }
 }
 
+//
+// Loads an ELF64 executable into the given address space (PML4).
+// Allocates and maps memory for PT_LOAD segments, sets correct page flags,
+// copies segment data from the ELF file, and returns the entry point address.
+// Returns 0 if the ELF header is invalid.
+//
 uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data) {
     Elf64_Ehdr* header = (Elf64_Ehdr*)elf_data;
+
+    // Verify ELF magic number
     if (memcmp(header->e_ident, "\x7F" "ELF", 4) != 0) return 0;
 
+    // Get virtual pointer to the PML4 page table and locate program headers
     page_table_t* pml4_virt = (page_table_t*)phys_to_virt(pml4_phys);
     Elf64_Phdr* phdr = (Elf64_Phdr*)((uintptr_t)elf_data + header->e_phoff);
 
+    // Disable write protection in CR0 (needed to modify kernel mappings)
     disable_wp_cr0();
 
     for (int i = 0; i < header->e_phnum; i++) {
+        // Only load segments marked as PT_LOAD
         if (phdr[i].p_type == PT_LOAD) {
+            // Setup page table flags based on ELF segment permissions
             uint64_t vmm_flags = PTE_PRESENT | PTE_USER;
             if (phdr[i].p_flags & PF_W) vmm_flags |= PTE_WRITABLE;
             if (!(phdr[i].p_flags & PF_X)) vmm_flags |= PTE_NX;
@@ -51,23 +63,30 @@ uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data) {
             uintptr_t end_page = PAGE_ALIGN_UP(phdr[i].p_vaddr + phdr[i].p_memsz);
             
             for (uintptr_t vpage = start_page; vpage < end_page; vpage += PAGE_SIZE) {
+
+                // Check if the virtual page is already mapped
                 uintptr_t phys = vmm_virtual_to_physical(pml4_virt, vpage);
                 if (phys == 0) {
                     uintptr_t frame = (uintptr_t)pmm_alloc_frame();
                     vmm_map(pml4_virt, vpage, frame, vmm_flags);
                     memset((void*)phys_to_virt(frame), 0, PAGE_SIZE);
                 } else {
+                    // Update permissions if page already exists
                     vmm_map(pml4_virt, vpage, phys, vmm_flags); 
                 }
             }
 
+            // Copy file-backed data into memory
             if (phdr[i].p_filesz > 0) {
-                elf_copy_segment(pml4_virt, phdr[i].p_vaddr, (void*)((uintptr_t)elf_data + phdr[i].p_offset), phdr[i].p_filesz);
+                elf_copy_segment(pml4_virt,
+                    phdr[i].p_vaddr,
+                    (void*)((uintptr_t)elf_data + phdr[i].p_offset),
+                    phdr[i].p_filesz
+                );
             }
         }
     }
-
+    // Re-enable WP
     enable_wp_cr0();
-
     return header->e_entry;
 }

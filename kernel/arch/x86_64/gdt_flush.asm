@@ -21,4 +21,5 @@ gdt_flush:
     mov  rax, 0x08        ; 0x08 is the offset of our Code Segment (gdt[1])
     push rax              ; Push new CS onto stack
     push rdi              ; Push return address back onto stack
+    
     retfq                 ; "Return Far" - pops RDI into RIP and RAX into CS
