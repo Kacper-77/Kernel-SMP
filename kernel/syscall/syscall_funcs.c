@@ -90,11 +90,10 @@ uint64_t sys_get_uptime_handler(interrupt_frame_t* frame) {
 }
 
 uint64_t sys_sleep_handler(interrupt_frame_t* frame) {
-    task_t* current = sched_get_current();
-    // RDI holds ms
-    current->sleep_until = get_uptime_ms() + frame->rdi;
-    current->state = TASK_SLEEPING;
-
+    uint64_t ms = frame->rdi;
+    if (ms > 0) {
+        sched_make_task_sleep(ms);
+    }
     return (uint64_t)schedule(frame);
 }
 

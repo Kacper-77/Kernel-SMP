@@ -43,6 +43,7 @@ void enqueue_task(cpu_context_t* cpu, task_t* task) {
 
     uint8_t p = task->priority;
     if (p >= PRIORITY_LEVELS) p = PRIO_NORMAL;
+    cpu->current_quanta[p] = 0; 
 
     task->sched_next = NULL;
     if (cpu->rq_tail[p]) {
@@ -53,7 +54,7 @@ void enqueue_task(cpu_context_t* cpu, task_t* task) {
     cpu->rq_tail[p] = task;
     cpu->rq_count[p]++;
 
-    // If task is "homeless", pin it to this CPU for now
+    // If task is "homeless" pin to it's CPU
     if (task->cpu_id == (uint64_t)-1) {
         task->cpu_id = cpu->cpu_id;
     }
@@ -65,15 +66,37 @@ task_t* dequeue_task(cpu_context_t* cpu) {
     spin_lock(&cpu->rq_lock);
 
     for (int p = 0; p < PRIORITY_LEVELS - 1; p++) {
-        if (cpu->rq_head[p]) {
-            task_t* t = cpu->rq_head[p];
-            cpu->rq_head[p] = t->sched_next;
-            if (!cpu->rq_head[p]) cpu->rq_tail[p] = NULL;
-            cpu->rq_count[p]--;
-
-            spin_unlock(&cpu->rq_lock);
-            return t;
+        if (!cpu->rq_head[p]) {
+            cpu->current_quanta[p] = 0;
+            continue;
         }
+
+        if (cpu->current_quanta[p] >= priority_quanta[p]) {
+            bool work_below = false;
+            for (int low = p + 1; low < PRIORITY_LEVELS - 1; low++) {
+                if (cpu->rq_head[low]) {
+                    work_below = true;
+                    break;
+                }
+            }
+            if (work_below) {
+                cpu->current_quanta[p] = 0;
+                continue; 
+            }
+            cpu->current_quanta[p] = 0;
+        }
+
+        task_t* t = cpu->rq_head[p];
+        cpu->rq_head[p] = t->sched_next;
+        if (!cpu->rq_head[p]) {
+            cpu->rq_tail[p] = NULL;
+        }
+        
+        cpu->rq_count[p]--;
+        cpu->current_quanta[p]++;
+
+        spin_unlock(&cpu->rq_lock);
+        return t;
     }
 
     spin_unlock(&cpu->rq_lock);
@@ -82,24 +105,59 @@ task_t* dequeue_task(cpu_context_t* cpu) {
 
 static void sched_update_sleepers() {
     uint64_t now = get_uptime_ms();
+    task_t* tasks_to_wake = NULL;
+    task_t** pp = &sleeping_task_list;
 
     spin_lock(&sched_lock_);
 
-    task_t* iter = root_task;
-    if (!iter) { spin_unlock(&sched_lock_); return; }
-
-    do {
-        if (iter->state == TASK_SLEEPING && now >= iter->sleep_until) {
-            iter->state = TASK_READY;
-            cpu_context_t* target_cpu = get_cpu_by_id(iter->cpu_id);
-            if (!target_cpu) target_cpu = get_cpu(); // Failsafe
+    while (*pp) {
+        task_t* t = *pp;
+        if (now >= t->sleep_until) {
+            *pp = t->sched_next;
             
-            enqueue_task(target_cpu, iter);
+            t->sched_next = tasks_to_wake;
+            tasks_to_wake = t;
+            
+            t->state = TASK_READY;
+        } else {
+            pp = &((*pp)->sched_next);
         }
-        iter = iter->next;
-    } while (iter != root_task);
+    }
 
     spin_unlock(&sched_lock_);
+
+    // Avoid AB-BA rq_lock
+    while (tasks_to_wake) {
+        task_t* t = tasks_to_wake;
+        tasks_to_wake = t->sched_next;
+
+        cpu_context_t* target_cpu = get_cpu_by_id(t->cpu_id);
+        if (!target_cpu) target_cpu = get_cpu();
+        
+        enqueue_task(target_cpu, t);
+    }
+}
+
+void sched_make_task_sleep(uint64_t ms) {
+    task_t* current = sched_get_current();
+    current->state = TASK_SLEEPING;
+    current->sleep_until = get_uptime_ms() + ms;
+
+    uint64_t f = spin_irq_save();
+    spin_lock(&sched_lock_);
+
+    // Find place in sorted list
+    task_t** pp = &sleeping_task_list;
+    while (*pp && (*pp)->sleep_until < current->sleep_until) {
+        pp = &((*pp)->sched_next);
+    }
+
+    // Insert task between
+    current->sched_next = *pp;
+    *pp = current;
+
+    spin_unlock(&sched_lock_);
+    spin_irq_restore(f);
 }
 
 //
@@ -213,7 +271,7 @@ uint64_t schedule(interrupt_frame_t* frame) {
 
     if (current) {
         current->rsp = (uintptr_t)frame;
-        if (current->state == TASK_RUNNING) {
+        if (current && current->state == TASK_RUNNING && current->priority != PRIO_IDLE) {
             current->state = TASK_READY;
             enqueue_task(cpu, current); 
         }
@@ -271,7 +329,6 @@ uint64_t schedule(interrupt_frame_t* frame) {
 //
 void sched_init_ap() {
     cpu_context_t* cpu = get_cpu();
-    
     cpu->idle_task = create_idle_struct(idle_task); 
     cpu->current_task = cpu->idle_task;
 }

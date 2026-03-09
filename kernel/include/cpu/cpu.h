@@ -80,6 +80,7 @@ typedef struct cpu_context {
     struct task* rq_head[PRIORITY_LEVELS];
     struct task* rq_tail[PRIORITY_LEVELS];
     uint32_t rq_count[PRIORITY_LEVELS];
+    uint32_t current_quanta[PRIORITY_LEVELS];
 } cpu_context_t;
 
 extern cpu_context_t* cpu_table[32];
@@ -154,6 +155,7 @@ static inline void cpu_init_context(cpu_context_t* ctx) {
         ctx->rq_head[i]  = NULL;
         ctx->rq_tail[i]  = NULL;
         ctx->rq_count[i] = 0;
+        ctx->current_quanta[i] = 0;
     }
     ctx->rq_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1};
     uint64_t addr = (uintptr_t)ctx;
