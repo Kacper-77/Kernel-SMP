@@ -10,8 +10,12 @@
 
 task_t* root_task = NULL;
 task_t* dead_task_list = NULL;
+task_t* sleeping_task_list = NULL;
+
 spinlock_t sched_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 spinlock_t dead_lock_  = { .ticket = 0, .current = 0, .last_cpu = -1 };
+
+static const uint32_t priority_quanta[] = { 10, 5, 2, 1 };  // High, Normal, Low, Idle
 
 //
 // The Idle Task: The ultimate fallback for the CPU when no tasks are ready.
