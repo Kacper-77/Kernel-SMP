@@ -103,7 +103,7 @@ task_t* dequeue_task(cpu_context_t* cpu) {
     return NULL;
 }
 
-static void sched_update_sleepers() {
+void sched_update_sleepers() {
     uint64_t now = get_uptime_ms();
     task_t* tasks_to_wake = NULL;
     task_t** pp = &sleeping_task_list;
@@ -244,6 +244,7 @@ void sched_init() {
     main_task->tid = 0;
     main_task->state = TASK_RUNNING;
     main_task->next = main_task;
+    main_task->prev = main_task;
 
     main_task->cpu_id = cpu->cpu_id;
     main_task->is_user = false;
@@ -265,9 +266,6 @@ uint64_t schedule(interrupt_frame_t* frame) {
     uint64_t f = spin_irq_save();
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
-
-    // Wake up sleeping tasks (BSP only)
-    if (cpu->cpu_id == 0) sched_update_sleepers();
 
     if (current) {
         current->rsp = (uintptr_t)frame;
@@ -361,8 +359,10 @@ void task_exit() {
     spin_unlock(&dead_lock_);
     spin_irq_restore(f);
 
+    __asm__ volatile("cli");
+
     // 4. Trigger immediate reschedule via timer interrupt vector
-    while(1) sched_yield(); 
+    while(1) { sched_yield(); __asm__ volatile("hlt"); }
 }
 
 //
@@ -385,33 +385,27 @@ void sched_reap() {
     spin_irq_restore(f);
 
     // 2. Iterate through global list and clean it
-    // Repeat that until to_clean != NULL
+    // Repeat that process until to_clean != NULL
     while (to_clean) {
-        task_t* next = to_clean->sched_next;
+        task_t* next_zombie = to_clean->sched_next;
 
+        uint64_t f = spin_irq_save();
         spin_lock(&sched_lock_);
 
-        task_t* curr = root_task;
-        task_t* prev = NULL;
+        task_t* p = to_clean->prev;
+        task_t* n = to_clean->next;
 
-        // Until current element != element from "to_clean"
-        do {
-            if (curr->next == to_clean) {
-                prev = curr;
-                break;
-            }
-            curr = curr->next;
-        } while (curr != root_task);
+        p->next = n;
+        n->prev = p;
 
-        if (prev) {
-            prev->next = to_clean->next;
-
-            if (to_clean == root_task) {
-                root_task = prev;
-            }
+        // Edge-case scenario
+        if (root_task == to_clean) {
+            if (n == to_clean) root_task = NULL;
+            else root_task = n;
         }
 
         spin_unlock(&sched_lock_);
+        spin_irq_restore(f);
 
         kprint("[REAPER] Cleaning up TID ");
         kprint_hex(to_clean->tid);
@@ -420,7 +414,7 @@ void sched_reap() {
         // 3. Finally free space and update "to_clean" list
         kfree((void*)to_clean->stack_base);
         kfree(to_clean);
-        to_clean = next;
+        to_clean = next_zombie;
     }
 }
 

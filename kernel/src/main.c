@@ -247,6 +247,7 @@ void kernel_main_high(BootInfo *bi) {
         kprint_hex(i);
         kprint("s...\n");
     }
+    
     arch_task_create(task_a);
     arch_task_create(task_b);
 
@@ -257,9 +258,7 @@ void kernel_main_high(BootInfo *bi) {
     kprint("###   Higher Half kernel is now idling.   ###\n");
 
     while(1) {
-        sched_reap();
         log_flush();
         __asm__ volatile("hlt");
-        sched_yield();
     }
 }

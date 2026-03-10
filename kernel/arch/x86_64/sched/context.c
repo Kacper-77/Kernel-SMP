@@ -43,8 +43,14 @@ static void task_register(task_t* t) {
     uint64_t f = spin_irq_save();
     spin_lock(&sched_lock_);
 
-    t->next = root_task->next;
-    root_task->next = t;
+    task_t* head = root_task;
+    task_t* tail = head->prev;
+
+    t->next = head;
+    t->prev = tail;
+
+    tail->next = t;
+    head->prev = t;
 
     spin_unlock(&sched_lock_);
     spin_irq_restore(f);

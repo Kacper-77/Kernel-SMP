@@ -25,6 +25,7 @@ typedef struct task {
     uintptr_t cr3;
 
     struct task* next;        // Global list for Reaper
+    struct task* prev;  
     struct task* sched_next;  // Runqueue Per-CPU
     uint8_t priority;
 
@@ -41,6 +42,7 @@ void sched_reap();
 
 void enqueue_task(cpu_context_t* cpu, task_t* task);
 task_t* dequeue_task(cpu_context_t* cpu);
+void sched_update_sleepers();
 void sched_make_task_sleep(uint64_t ms);
 
 task_t* sched_get_current();
