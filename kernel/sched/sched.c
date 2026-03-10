@@ -31,7 +31,6 @@ static void idle_task() {
         }
         for(volatile int i=0; i<500; i++) __asm__ volatile("pause");
         __asm__ volatile("hlt");
-        sched_yield();  // Trigger scheduler
     }
 }
 
