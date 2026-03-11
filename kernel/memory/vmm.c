@@ -289,6 +289,48 @@ void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_
 }
 
 //
+// Cleanig Identity-Mapping
+//
+void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
+    uint64_t f = spin_irq_save();
+    spin_lock(&vmm_lock_);
+
+    uint64_t pml4_i = PML4_IDX(virt);
+    uint64_t pdpt_i = PDPT_IDX(virt);
+    uint64_t pd_i   = PD_IDX(virt);
+    uint64_t pt_i   = PT_IDX(virt);
+
+    if (!(pml4->entries[pml4_i] & PTE_PRESENT)) goto done;
+    page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
+
+    if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) goto done;
+    page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
+
+    if (!(pd->entries[pd_i] & PTE_PRESENT)) goto done;
+    page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
+
+    pt->entries[pt_i] = 0;
+    vmm_invlpg((void*)virt);
+
+done:
+    sync_tlb(); // Flush TLB
+    spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
+}
+
+void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {
+    uint64_t f = spin_irq_save();
+    spin_lock(&vmm_lock_);
+
+    _vmm_unmap_range_unlocked(pml4, virt, size);
+
+    sync_tlb();  // Flush TLB
+
+    spin_unlock(&vmm_lock_);
+    spin_irq_restore(f);
+}
+
+//
 // Performs a "Page Walk" to translate a virtual address to its physical counterpart.
 // Returns the physical address or 0 if the page is not mapped.
 //
@@ -432,48 +474,6 @@ void vmm_init(BootInfo* bi) {
     // 12. ENABLE WP
     // After everything is ready
     enable_wp_cr0();
-}
-
-//
-// Cleanig Identity-Mapping
-//
-void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
-    uint64_t f = spin_irq_save();
-    spin_lock(&vmm_lock_);
-
-    uint64_t pml4_i = PML4_IDX(virt);
-    uint64_t pdpt_i = PDPT_IDX(virt);
-    uint64_t pd_i   = PD_IDX(virt);
-    uint64_t pt_i   = PT_IDX(virt);
-
-    if (!(pml4->entries[pml4_i] & PTE_PRESENT)) goto done;
-    page_table_t* pdpt = vmm_get_table(pml4->entries[pml4_i] & VMM_ADDR_MASK);
-
-    if (!(pdpt->entries[pdpt_i] & PTE_PRESENT)) goto done;
-    page_table_t* pd = vmm_get_table(pdpt->entries[pdpt_i] & VMM_ADDR_MASK);
-
-    if (!(pd->entries[pd_i] & PTE_PRESENT)) goto done;
-    page_table_t* pt = vmm_get_table(pd->entries[pd_i] & VMM_ADDR_MASK);
-
-    pt->entries[pt_i] = 0;
-    vmm_invlpg((void*)virt);
-
-done:
-    sync_tlb(); // Flush TLB
-    spin_unlock(&vmm_lock_);
-    spin_irq_restore(f);
-}
-
-void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {
-    uint64_t f = spin_irq_save();
-    spin_lock(&vmm_lock_);
-
-    _vmm_unmap_range_unlocked(pml4, virt, size);
-
-    sync_tlb();  // Flush TLB
-
-    spin_unlock(&vmm_lock_);
-    spin_irq_restore(f);
 }
 
 //

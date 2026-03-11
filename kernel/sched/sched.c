@@ -102,6 +102,12 @@ task_t* dequeue_task(cpu_context_t* cpu) {
     return NULL;
 }
 
+//
+// Iterates through the global list of sleeping tasks and wakes up those 
+// whose sleep duration has expired. To prevent deadlocks (AB-BA), it first 
+// extracts tasks from the sleeping list under 'sched_lock_' and then 
+// enqueues them into their respective CPU runqueues.
+//
 void sched_update_sleepers() {
     uint64_t now = get_uptime_ms();
     task_t* tasks_to_wake = NULL;
@@ -137,6 +143,12 @@ void sched_update_sleepers() {
     }
 }
 
+//
+// Transitions the current task into the TASK_SLEEPING state and calculates 
+// its wake-up time. The task is then inserted into the 'sleeping_task_list' 
+// in a sorted manner (by wake-up time) to allow efficient processing 
+// during scheduler updates.
+//
 void sched_make_task_sleep(uint64_t ms) {
     task_t* current = sched_get_current();
     current->state = TASK_SLEEPING;

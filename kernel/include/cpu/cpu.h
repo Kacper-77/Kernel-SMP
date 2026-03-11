@@ -66,14 +66,14 @@ typedef struct cpu_context {
     struct {
         uint16_t limit;
         uint64_t base;
-    } __attribute__((packed)) gdt_ptr;      
+    } __attribute__((packed)) gdt_ptr;
+    
+    uint64_t pmm_last_index;
+    uint32_t lapic_ticks_per_ms;
     
     // Scheduler
     struct task* current_task;
     struct task* idle_task;
-    
-    uint64_t pmm_last_index;
-    uint32_t lapic_ticks_per_ms;
 
     // Runqueue 
     spinlock_t rq_lock;
