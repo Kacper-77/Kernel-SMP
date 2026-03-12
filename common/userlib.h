@@ -2,26 +2,53 @@
 #define USERLIB_H
 
 #include <stdint.h>
+#include <stddef.h>
 
-// Macros for now cuz compiler is my enemy
-#define syscall_3(num, a1, a2, a3) ({ \
-    uint64_t _ret; \
-    __asm__ volatile ( \
-        "syscall" \
-        : "=a"(_ret) \
-        : "a"((uint64_t)(num)), "D"((uint64_t)(a1)), "S"((uint64_t)(a2)), "d"((uint64_t)(a3)) \
-        : "rcx", "r11", "memory" \
-    ); \
-    _ret; \
-})
+// Genaeral helper for Syscalls
+static inline uint64_t syscall_3(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3) {
+    uint64_t ret;
+    __asm__ volatile (
+        "syscall"
+        : "=a"(ret)
+        : "a"(num), "D"(a1), "S"(a2), "d"(a3)
+        : "rcx", "r11", "memory"
+    );
+    return ret;
+}
 
-#define u_print(s)      syscall_3(1, s, 0, 0)
-#define u_exit()        syscall_3(2, 0, 0, 0)
-#define u_get_uptime()  syscall_3(3, 0, 0, 0)
-#define u_sleep(ms)     syscall_3(4, ms, 0, 0)
-#define u_yield()       syscall_3(5, 0, 0, 0)
-#define u_read_kbd()    ((char)syscall_3(6, 0, 0, 0))
-#define u_print_hex(val)  syscall_3(7, val, 0, 0)
-#define u_get_cpuid()   syscall_3(8, 0, 0, 0)
+//
+// USER INTERFACE
+//
+static inline void u_print(const char* s) {
+    syscall_3(1, (uintptr_t)s, 0, 0);
+}
+
+static inline void u_exit(void) {
+    syscall_3(2, 0, 0, 0);
+}
+
+static inline uint64_t u_get_uptime(void) {
+    return syscall_3(3, 0, 0, 0);
+}
+
+static inline void u_sleep(uint64_t ms) {
+    syscall_3(4, ms, 0, 0);
+}
+
+static inline void u_yield(void) {
+    syscall_3(5, 0, 0, 0);
+}
+
+static inline char u_read_kbd(void) {
+    return (char)syscall_3(6, 0, 0, 0);
+}
+
+static inline void u_print_hex(uint64_t val) {
+    syscall_3(7, val, 0, 0);
+}
+
+static inline uint64_t u_get_cpuid(void) {
+    return syscall_3(8, 0, 0, 0);
+}
 
 #endif
