@@ -22,7 +22,7 @@ static task_t* task_alloc_base() {
 
     memset(t, 0, sizeof(task_t));
 
-    t->stack_size = 0x4000;
+    t->stack_size = 4 * PAGE_SIZE;
     t->stack_base = (uintptr_t)kmalloc(t->stack_size);
     if (!t->stack_base) { kfree(t); return NULL; }
 
@@ -121,21 +121,20 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     memcpy((void*)phys_to_virt(code_phys), (void*)entry_point, 4 * PAGE_SIZE);
 
     // Setup User Stack 
-    uintptr_t user_stack_phys = (uintptr_t)pmm_alloc_frames(4);
-    uintptr_t user_stack_virt = 0x00007FFFF0000000; 
-    vmm_map_range(pml4_virt, user_stack_virt, user_stack_phys, 4 * PAGE_SIZE,
+    uintptr_t u_stack_phys = (uintptr_t)pmm_alloc_frames(4);
+    uintptr_t u_stack_virt = 0x00007FFFFFFFF000 - (4 * PAGE_SIZE);
+    vmm_map_range(pml4_virt, u_stack_virt, u_stack_phys, 4 * PAGE_SIZE,
                 PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX); 
 
     interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(interrupt_frame_t));
 
-    frame->rip    = code_virt;  // Back to low addr
+    frame->rip    = code_virt;
     frame->cs     = 0x1B;     
     frame->ss     = 0x23;     
     frame->rflags = 0x202; 
-    
-    frame->rsp = user_stack_virt + (4 * PAGE_SIZE) - 8; 
-    frame->rbp = frame->rsp;
+    frame->rsp    = u_stack_virt + (4 * PAGE_SIZE) - 8;  // SYS V ABI alignment
+    frame->rbp    = frame->rsp;
     
     t->rsp = (uintptr_t)frame;
     t->cr3 = cr3;
@@ -171,7 +170,7 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;
     page_table_t* pml4_virt = vmm_get_table(cr3);
 
-    uintptr_t u_stack_virt = 0x00007FFFF0000000;
+    uintptr_t u_stack_virt = 0x00007FFFFFFFF000 - (4 * PAGE_SIZE);
     uintptr_t u_stack_phys = (uintptr_t)pmm_alloc_frames(4);
     vmm_map_range(pml4_virt, u_stack_virt, u_stack_phys, 4 * PAGE_SIZE, 
                   PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
@@ -183,7 +182,7 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
     frame->cs     = 0x1B;
     frame->ss     = 0x23;
     frame->rflags = 0x202;
-    frame->rsp    = u_stack_virt + (4 * PAGE_SIZE) - 8;
+    frame->rsp    = u_stack_virt + (4 * PAGE_SIZE) - 8;  // SYS V ABI alignment
     frame->rbp    = frame->rsp;
 
     t->rsp     = (uintptr_t)frame;
