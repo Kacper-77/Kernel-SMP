@@ -11,7 +11,7 @@ static void user_test_task_2() {
         counter++;
     }
     u_print(msg2);
-    // u_exit();
+    u_yield();
 }
 
 

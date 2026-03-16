@@ -3,6 +3,7 @@
 #include <i8042.h>
 #include <serial.h>
 #include <spinlock.h>
+#include <sched.h>
 
 static spinlock_t kbd_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 
@@ -46,6 +47,7 @@ void ps2_keyboard_handler() {
             uint8_t ascii = use_upper ? scancode_set2_upper[scancode] : scancode_set2_lower[scancode];
             if (ascii != 0) {
                 kbd_push_char(ascii);
+                sched_wakeup(REASON_KEYBOARD);
             }
         }
         is_extended = 0; // Ensure extended state is cleared after processing
@@ -69,17 +71,20 @@ void kbd_push_char(char c) {
 //
 // Pops char from Circular Buffer
 //
-char kbd_pop_char() {
+bool kbd_pop_char(char* out_char) {
     uint64_t f = spin_irq_save();
     spin_lock(&kbd_lock_);
 
-    char c = 0;
-    if (kbd_head != kbd_tail) {
-        c = kbd_buffer[kbd_tail];
-        kbd_tail = (kbd_tail + 1) % KBD_BUF_SIZE;
+    if (kbd_head == kbd_tail) {
+        spin_unlock(&kbd_lock_);
+        spin_irq_restore(f);
+        return false;
     }
+
+    *out_char = kbd_buffer[kbd_tail];
+    kbd_tail  = (kbd_tail + 1) % KBD_BUF_SIZE;
 
     spin_unlock(&kbd_lock_);
     spin_irq_restore(f);
-    return c;
+    return true;
 }

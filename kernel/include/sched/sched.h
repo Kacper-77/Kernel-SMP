@@ -12,15 +12,22 @@ typedef enum {
     TASK_RUNNING,
     TASK_SLEEPING,
     TASK_ZOMBIE,
-    TASK_FINISHED
+    TASK_FINISHED,
+    TASK_BLOCKED
 } task_state_t;
+
+typedef enum {
+    REASON_KEYBOARD
+} task_reason_t;
 
 typedef struct task {
     uint64_t tid;
     uintptr_t rsp;          
     uintptr_t stack_base;   
     uint64_t stack_size;
+
     task_state_t state;
+    task_reason_t wait_reason;
     bool is_user;       
     uintptr_t cr3;
 
@@ -44,6 +51,8 @@ void enqueue_task(cpu_context_t* cpu, task_t* task);
 task_t* dequeue_task(cpu_context_t* cpu);
 void sched_update_sleepers();
 void sched_make_task_sleep(uint64_t ms);
+void sched_block_current(task_reason_t reason);
+void sched_wakeup(task_reason_t reason);
 
 task_t* sched_get_current();
 task_t* arch_task_create(void (*entry_point)(void));

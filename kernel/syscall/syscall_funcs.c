@@ -73,15 +73,14 @@ uint64_t sys_get_cpuid_handler(interrupt_frame_t* frame) {
 }
 
 uint64_t sys_exit_handler(interrupt_frame_t* frame) {
-    (void)frame;
     task_exit();
-
     return (uint64_t)schedule(frame);
 }
 
 uint64_t sys_yield_handler(interrupt_frame_t* frame) {
     (void)frame;
-    return (uint64_t)schedule(frame);
+    sched_yield();
+    return 0;
 }
 
 uint64_t sys_get_uptime_handler(interrupt_frame_t* frame) {
@@ -99,7 +98,13 @@ uint64_t sys_sleep_handler(interrupt_frame_t* frame) {
 
 uint64_t sys_read_kbd_handler(interrupt_frame_t* frame) {
     (void)frame;
-    return (uint64_t)kbd_pop_char();
+    char c;
+
+    while (!kbd_pop_char(&c)) {
+        sched_block_current(REASON_KEYBOARD); 
+        sched_yield();
+    }
+    return (uint64_t)c;
 }
 
 //

@@ -2,6 +2,7 @@
 #define PS2_KBD_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 // Special keys (not included in ASCII)
 #define KBD_KEY_UP        0x80
@@ -56,6 +57,6 @@ static const uint8_t scancode_set2_upper[] = {
 
 void ps2_keyboard_handler();
 void kbd_push_char(char c);
-char kbd_pop_char();
+bool kbd_pop_char(char* out_char);
 
 #endif

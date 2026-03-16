@@ -80,7 +80,7 @@ static void task_a() {
     int x = 0;
     while(x < 10) {
         kprint("A");
-        msleep(100);
+        msleep(10);
         x++;
     }
     task_exit();
@@ -90,7 +90,7 @@ static void task_b() {
     int x = 0;
     while(x < 15) {
         kprint("B");
-        msleep(100);
+        msleep(10);
         x++;
     }
     task_exit();
@@ -256,6 +256,8 @@ void kernel_main_high(BootInfo *bi) {
     kprint(" ms\n");
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
+
+    // msleep(500);
 
     while(1) {
         log_flush();

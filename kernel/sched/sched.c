@@ -8,12 +8,15 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 
-task_t* root_task = NULL;
-task_t* dead_task_list = NULL;
+task_t* root_task          = NULL;
+task_t* dead_task_list     = NULL;
 task_t* sleeping_task_list = NULL;
+task_t* blocked_task_list  = NULL;
 
-spinlock_t sched_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
-spinlock_t dead_lock_  = { .ticket = 0, .current = 0, .last_cpu = -1 };
+spinlock_t sched_lock_    = { .ticket = 0, .current = 0, .last_cpu = -1 };
+spinlock_t dead_lock_     = { .ticket = 0, .current = 0, .last_cpu = -1 };  // task_exit, sched_reap
+spinlock_t sleep_lock_    = { .ticket = 0, .current = 0, .last_cpu = -1 };  // sched_update_sleepers
+spinlock_t blocked_lock_  = { .ticket = 0, .current = 0, .last_cpu = -1 };  // sched_block_current, sched_wakeup
 
 static const uint32_t priority_quanta[] = { 10, 5, 2, 1 };  // High, Normal, Low, Idle
 
@@ -113,7 +116,8 @@ void sched_update_sleepers() {
     task_t* tasks_to_wake = NULL;
     task_t** pp = &sleeping_task_list;
 
-    spin_lock(&sched_lock_);
+    uint64_t f = spin_irq_save();
+    spin_lock(&sleep_lock_);
 
     while (*pp) {
         task_t* t = *pp;
@@ -129,7 +133,8 @@ void sched_update_sleepers() {
         }
     }
 
-    spin_unlock(&sched_lock_);
+    spin_unlock(&sleep_lock_);
+    spin_irq_restore(f);
 
     // Avoid AB-BA rq_lock
     while (tasks_to_wake) {
@@ -151,6 +156,8 @@ void sched_update_sleepers() {
 //
 void sched_make_task_sleep(uint64_t ms) {
     task_t* current = sched_get_current();
+    if (!current) return;
+
     current->state = TASK_SLEEPING;
     current->sleep_until = get_uptime_ms() + ms;
 
@@ -169,6 +176,66 @@ void sched_make_task_sleep(uint64_t ms) {
 
     spin_unlock(&sched_lock_);
     spin_irq_restore(f);
+}
+
+//
+// Blocks the current task and adds it to the blocked list with a specific reason.
+// The task remains in TASK_BLOCKED state until a matching sched_wakeup is called.
+//
+void sched_block_current(task_reason_t reason) {
+    task_t* current = sched_get_current();
+    if (!current) return;
+
+    uint64_t f = spin_irq_save();
+    spin_lock(&blocked_lock_);
+
+    current->state = TASK_BLOCKED;
+    current->wait_reason = reason;
+    current->sched_next  = blocked_task_list;
+    blocked_task_list    = current;
+
+    spin_unlock(&blocked_lock_);
+    spin_irq_restore(f);
+}
+
+//
+// Wakes up all tasks from the blocked list that match the specified reason.
+// Transitions tasks to TASK_READY and re-inserts them into their respective 
+// CPU runqueues. Uses a two-phase approach to minimize lock contention.
+//
+void sched_wakeup(task_reason_t reason) {
+    task_t* tasks_to_wake = NULL;
+    task_t** pp = &blocked_task_list;
+
+    uint64_t f = spin_irq_save();
+    spin_lock(&blocked_lock_);
+
+    while (*pp) {
+        task_t* t = *pp;
+        if (t->wait_reason == reason) {
+            *pp = t->sched_next;
+
+            t->sched_next = tasks_to_wake;
+            tasks_to_wake = t;
+            t->state = TASK_READY;
+        } else {
+            pp = &((*pp)->sched_next);
+        }
+    }
+    
+    spin_unlock(&blocked_lock_);
+    spin_irq_restore(f);
+
+    while (tasks_to_wake) {
+        task_t* t = tasks_to_wake;
+        tasks_to_wake = t->sched_next;
+
+        cpu_context_t* target_cpu = get_cpu_by_id(t->cpu_id);
+        if (!target_cpu) target_cpu = get_cpu();
+        
+        enqueue_task(target_cpu, t);
+    }
+    
 }
 
 //
@@ -368,7 +435,6 @@ void task_exit() {
     dead_task_list = current;
 
     spin_unlock(&dead_lock_);
-    spin_irq_restore(f);
 
     __asm__ volatile("cli");
 
