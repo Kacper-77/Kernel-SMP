@@ -435,8 +435,7 @@ void task_exit() {
     dead_task_list = current;
 
     spin_unlock(&dead_lock_);
-
-    __asm__ volatile("cli");
+    spin_irq_restore(f);
 
     // 4. Trigger immediate reschedule via timer interrupt vector
     while(1) { sched_yield(); __asm__ volatile("hlt"); }
