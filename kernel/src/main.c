@@ -29,7 +29,7 @@
 // Global spinlock flag
 int g_lock_enabled = 0;
 
-syscall_ptr_t sys_table[10] = { 0 };
+syscall_ptr_t sys_table[20] = { 0 };
 
 void kernel_main_high(BootInfo *bi);
 
