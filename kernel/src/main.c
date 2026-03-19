@@ -223,7 +223,7 @@ void kernel_main_high(BootInfo *bi) {
             kprint("BSP: Broadcasting IPI...\n");
             lapic_broadcast_ipi(IPI_VECTOR_TEST);
 
-            kmalloc_dump();
+            // kmalloc_dump();
 
             // panic("End of boot test - halting system.");
         }
@@ -256,11 +256,9 @@ void kernel_main_high(BootInfo *bi) {
     kprint(" ms\n");
 
     kprint("###   Higher Half kernel is now idling.   ###\n");
-
-    // msleep(500);
-
+    msleep(500);
+    
     while(1) {
-        log_flush();
         __asm__ volatile("hlt");
     }
 }

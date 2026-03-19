@@ -22,6 +22,6 @@ void smp_init(BootInfo* bi);
 void smp_init_cpu(uint8_t lapic_id, uint64_t cpu_id);
 void boot_ap(uint32_t apic_id, uint8_t vector);
 
-uint64_t get_cpu_count_test();
+uint8_t get_cpu_count_test();
 
 #endif

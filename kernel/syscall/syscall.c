@@ -22,8 +22,10 @@ uint64_t syscall_handler(interrupt_frame_t* frame) {
 
     uint64_t res = sys_table[sys_num](frame);
 
-    // Special case, "sleep" and "exit" returns schedule(frame)
-    if (sys_num == SYS_SLEEP || sys_num == SYS_EXIT) return res;
+    // Special case, if syscall returns schedule(frame)
+    if (sys_num == SYS_SLEEP || 
+        sys_num == SYS_EXIT) 
+        return res;
 
     // Sys V ABI compatibility
     frame->rax = res;

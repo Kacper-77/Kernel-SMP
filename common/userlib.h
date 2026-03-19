@@ -51,4 +51,20 @@ static inline uint64_t u_get_cpuid(void) {
     return syscall_3(8, 0, 0, 0);
 }
 
+static inline uint64_t u_sys_malloc(size_t size) {
+    return (uint64_t)syscall_3(9, size, 0, 0);
+}
+
+static inline void u_sys_free(uint64_t ptr) {
+    syscall_3(10, ptr, 0, 0);
+}
+
+static inline uint32_t u_sys_get_tid() {
+    return syscall_3(11, 0, 0, 0);
+}
+
+static inline uint8_t u_sys_cpu_count() {
+    return (uint8_t)syscall_3(12, 0, 0, 0);
+}
+
 #endif

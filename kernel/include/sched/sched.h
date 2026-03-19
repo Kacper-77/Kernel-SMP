@@ -30,6 +30,9 @@ typedef struct task {
     task_reason_t wait_reason;
     bool is_user;       
     uintptr_t cr3;
+    uintptr_t heap_start;
+    uintptr_t heap_curr;
+    uint64_t  heap_size;
 
     struct task* next;        // Global list for Reaper
     struct task* prev;  

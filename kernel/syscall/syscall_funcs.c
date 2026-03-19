@@ -4,6 +4,11 @@
 #include <serial.h>
 #include <ps2_kbd.h>
 #include <cpu.h>
+#include <kmalloc.h>
+#include <smp.h>
+#include <vmm.h>
+#include <pmm.h>
+#include <std_funcs.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -107,6 +112,42 @@ uint64_t sys_read_kbd_handler(interrupt_frame_t* frame) {
     return (uint64_t)c;
 }
 
+uint64_t sys_malloc_handler(interrupt_frame_t* frame) {
+    size_t size = frame->rdi;
+    task_t* current = sched_get_current();
+
+    uint64_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    void* phys = pmm_alloc_frames(pages);
+    if (!phys) return 0;
+
+    vmm_map_range(vmm_get_table(current->cr3), current->heap_curr, 
+                  (uintptr_t)phys, pages * PAGE_SIZE, 
+                  PTE_PRESENT | PTE_WRITABLE | PTE_USER);
+
+    uintptr_t ret = current->heap_curr;
+    current->heap_curr += (pages * PAGE_SIZE);
+
+    memset((void*)phys_to_virt((uintptr_t)phys), 0, pages * PAGE_SIZE);
+    
+    return (uint64_t)ret;
+}
+
+uint64_t sys_free_handler(interrupt_frame_t* frame) {
+    (void)frame;
+    // !!! VMA !!!
+    return 0;
+}
+
+uint64_t sys_get_tid_handler(interrupt_frame_t* frame) {
+    (void)frame;
+    return (uint64_t)sched_get_current()->tid;
+}
+
+uint64_t sys_cpu_count_handler(interrupt_frame_t* frame) {
+    (void)frame;
+    return (uint64_t)get_cpu_count_test();
+}
+
 //
 // INIT SYS TABLE
 //
@@ -119,4 +160,8 @@ void init_sys_table() {
     sys_table[SYS_KBD_PS2]    = sys_read_kbd_handler;
     sys_table[SYS_KPRINT_HEX] = sys_kprint_hex_handler;
     sys_table[SYS_CPU_ID]     = sys_get_cpuid_handler;
+    sys_table[SYS_MALLOC]     = sys_malloc_handler;
+    sys_table[SYS_FREE]       = sys_free_handler;
+    sys_table[SYS_GET_TID]    = sys_get_tid_handler;
+    sys_table[SYS_CPU_COUNT]  = sys_cpu_count_handler;
 }

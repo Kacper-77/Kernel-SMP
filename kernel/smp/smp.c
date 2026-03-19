@@ -195,6 +195,6 @@ void boot_ap(uint32_t apic_id, uint8_t vector) {
     msleep(1);
 }
 
-uint64_t get_cpu_count_test() {
+uint8_t get_cpu_count_test() {
     return cpu_count;
 }
