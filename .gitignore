@@ -5,3 +5,4 @@ esp
 scripts
 .vscode
 ramdisk
+.DS_Store
