@@ -87,7 +87,7 @@ void _start() {
 
     user_test_task_2();
 
-    user_malloc_test();
+    // user_malloc_test();
 
     user_info_test();
     

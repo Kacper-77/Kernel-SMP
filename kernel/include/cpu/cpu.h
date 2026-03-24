@@ -157,7 +157,7 @@ static inline void cpu_init_context(cpu_context_t* ctx) {
         ctx->rq_count[i] = 0;
         ctx->current_quanta[i] = 0;
     }
-    ctx->rq_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1};
+    ctx->rq_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
     uint64_t addr = (uintptr_t)ctx;
     
     // MSR_GS_BASE (0xC0000101)

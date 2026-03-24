@@ -259,6 +259,7 @@ void kernel_main_high(BootInfo *bi) {
     msleep(500);
     
     while(1) {
+        log_flush();
         __asm__ volatile("hlt");
     }
 }

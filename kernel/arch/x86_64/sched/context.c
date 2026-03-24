@@ -139,9 +139,6 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     t->rsp = (uintptr_t)frame;
     t->cr3 = cr3;
     t->is_user = true;
-    t->heap_start = 0x1000000; 
-    t->heap_curr  = t->heap_start;
-    t->heap_size  = 0;
 
     task_register(t);
 
@@ -191,9 +188,6 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
     t->rsp     = (uintptr_t)frame;
     t->cr3     = cr3;
     t->is_user = true;
-    t->heap_start = 0x1000000; 
-    t->heap_curr  = t->heap_start;
-    t->heap_size  = 0;
 
     task_register(t);
 

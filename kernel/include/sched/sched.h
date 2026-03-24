@@ -3,6 +3,8 @@
 
 #include <idt.h>
 #include <cpu.h>
+#include <spinlock.h>
+#include <vma.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -21,18 +23,24 @@ typedef enum {
 } task_reason_t;
 
 typedef struct task {
-    uint64_t tid;
+    uint64_t  tid;
     uintptr_t rsp;          
     uintptr_t stack_base;   
-    uint64_t stack_size;
+    uint64_t  stack_size;
 
-    task_state_t state;
+    task_state_t  state;
     task_reason_t wait_reason;
     bool is_user;       
     uintptr_t cr3;
+
+    // VMA & Memory Management
+    struct vma_area* vma_tree_root; 
+    struct vma_area* vma_list_head;
+    spinlock_t vma_lock;
+    uint64_t   vma_count; 
+    
     uintptr_t heap_start;
-    uintptr_t heap_curr;
-    uint64_t  heap_size;
+    uintptr_t heap_curr;          
 
     struct task* next;        // Global list for Reaper
     struct task* prev;  
