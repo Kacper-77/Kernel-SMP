@@ -2,6 +2,7 @@
 #define ELF_H
 
 #include <stdint.h>
+#include <sched.h>
 
 #define ELF_MAGIC 0x464C457F // "\x7FELF"
 
@@ -47,6 +48,6 @@ typedef struct {
     uintptr_t stack_top;  
 } elf_info_t;
 
-uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data);
+uintptr_t elf_load(task_t* t, void* elf_data);
 
 #endif

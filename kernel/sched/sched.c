@@ -5,6 +5,7 @@
 #include <kmalloc.h>
 #include <pmm.h>
 #include <vmm.h>
+#include <vma.h>
 #include <spinlock.h>
 #include <std_funcs.h>
 
@@ -20,12 +21,12 @@ spinlock_t blocked_lock_  = { .ticket = 0, .current = 0, .last_cpu = -1 };  // s
 
 static const uint32_t priority_quanta[] = { 10, 5, 2, 1 };  // High, Normal, Low, Idle
 
-//
-// The Idle Task: The ultimate fallback for the CPU when no tasks are ready.
-// It keeps the processor in a low-power state (HLT). On CPU 0, this task 
-// also acts as the 'Reaper', responsible for deallocating ZOMBIE tasks 
-// to prevent memory leaks in the scheduler.
-//
+/*
+ * The Idle Task: The ultimate fallback for the CPU when no tasks are ready.
+ * It keeps the processor in a low-power state (HLT). On CPU 0, this task 
+ * also acts as the 'Reaper', responsible for deallocating ZOMBIE tasks 
+ * to prevent memory leaks in the scheduler.
+ */
 static void idle_task() {
     while (1) {
         if (get_cpu()->cpu_id == 0) {
@@ -37,9 +38,9 @@ static void idle_task() {
     }
 }
 
-//
-// RUNQUEUE SECTION
-//
+/*
+ *  RUNQUEUE SECTION
+ */
 void enqueue_task(cpu_context_t* cpu, task_t* task) {
     spin_lock(&cpu->rq_lock);
 
@@ -105,12 +106,12 @@ task_t* dequeue_task(cpu_context_t* cpu) {
     return NULL;
 }
 
-//
-// Iterates through the global list of sleeping tasks and wakes up those 
-// whose sleep duration has expired. To prevent deadlocks (AB-BA), it first 
-// extracts tasks from the sleeping list under 'sched_lock_' and then 
-// enqueues them into their respective CPU runqueues.
-//
+/*
+ * Iterates through the global list of sleeping tasks and wakes up those 
+ * whose sleep duration has expired. To prevent deadlocks (AB-BA), it first 
+ * extracts tasks from the sleeping list under 'sched_lock_' and then 
+ * enqueues them into their respective CPU runqueues.
+ */
 void sched_update_sleepers() {
     uint64_t now = get_uptime_ms();
     task_t* tasks_to_wake = NULL;
@@ -148,12 +149,12 @@ void sched_update_sleepers() {
     }
 }
 
-//
-// Transitions the current task into the TASK_SLEEPING state and calculates 
-// its wake-up time. The task is then inserted into the 'sleeping_task_list' 
-// in a sorted manner (by wake-up time) to allow efficient processing 
-// during scheduler updates.
-//
+/*
+ * Transitions the current task into the TASK_SLEEPING state and calculates 
+ * its wake-up time. The task is then inserted into the 'sleeping_task_list' 
+ * in a sorted manner (by wake-up time) to allow efficient processing 
+ * during scheduler updates.
+ */
 void sched_make_task_sleep(uint64_t ms) {
     task_t* current = sched_get_current();
     if (!current) return;
@@ -178,10 +179,10 @@ void sched_make_task_sleep(uint64_t ms) {
     spin_irq_restore(f);
 }
 
-//
-// Blocks the current task and adds it to the blocked list with a specific reason.
-// The task remains in TASK_BLOCKED state until a matching sched_wakeup is called.
-//
+/*
+ * Blocks the current task and adds it to the blocked list with a specific reason.
+ * The task remains in TASK_BLOCKED state until a matching sched_wakeup is called.
+ */
 void sched_block_current(task_reason_t reason) {
     task_t* current = sched_get_current();
     if (!current) return;
@@ -198,11 +199,11 @@ void sched_block_current(task_reason_t reason) {
     spin_irq_restore(f);
 }
 
-//
-// Wakes up all tasks from the blocked list that match the specified reason.
-// Transitions tasks to TASK_READY and re-inserts them into their respective 
-// CPU runqueues. Uses a two-phase approach to minimize lock contention.
-//
+/*
+ * Wakes up all tasks from the blocked list that match the specified reason.
+ * Transitions tasks to TASK_READY and re-inserts them into their respective 
+ * CPU runqueues. Uses a two-phase approach to minimize lock contention.
+ */
 void sched_wakeup(task_reason_t reason) {
     task_t* tasks_to_wake = NULL;
     task_t** pp = &blocked_task_list;
@@ -238,9 +239,9 @@ void sched_wakeup(task_reason_t reason) {
     
 }
 
-//
-// Allocates and initializes the idle task structure for a specific CPU.
-//
+/*
+ * Allocates and initializes the idle task structure for a specific CPU.
+ */
 static task_t* create_idle_struct(void (*entry)(void)) {
     task_t* t = kmalloc(sizeof(task_t));
     memset(t, 0, sizeof(task_t));
@@ -271,14 +272,16 @@ static task_t* create_idle_struct(void (*entry)(void)) {
     t->state      = TASK_RUNNING;
     t->cpu_id     = get_cpu()->cpu_id;
     t->priority   = PRIO_IDLE;
+    vma_init_task(t);
+
     return t;
 }
 
-//
-// Attempts to steal a migratable user task (TID >= 10) from another CPU's 
-// runqueue to balance load. Respects priority levels and uses trylock 
-// to avoid deadlocks during synchronization.
-//
+/*
+ * Attempts to steal a migratable user task (TID >= 10) from another CPU's 
+ * runqueue to balance load. Respects priority levels and uses trylock 
+ * to avoid deadlocks during synchronization.
+ */
 static task_t* steal_task_from_cpu(cpu_context_t* other) {
     if (!spin_trylock(&other->rq_lock)) return NULL;
 
@@ -309,9 +312,9 @@ static task_t* steal_task_from_cpu(cpu_context_t* other) {
     return stolen;
 }
 
-//
-// Initializes the scheduler on the Bootstrap Processor (BSP).
-//
+/*
+ * Initializes the scheduler on the Bootstrap Processor (BSP).
+ */
 void sched_init() {
     cpu_context_t* cpu = get_cpu();
     
@@ -320,6 +323,7 @@ void sched_init() {
     memset(main_task, 0, sizeof(task_t));
     
     main_task->tid = 0;
+    vma_init_task(main_task);
     main_task->state = TASK_RUNNING;
     main_task->next = main_task;
     main_task->prev = main_task;
@@ -334,12 +338,12 @@ void sched_init() {
     cpu->idle_task = create_idle_struct(idle_task);
 }
 
-//
-// Core SMP Multi-level Round-Robin Scheduler.
-// Handles context switching, load balancing via work stealing, and task states.
-// frame is a Pointer to the current interrupt stack frame.
-// returns The stack pointer (RSP) of the next task to run.
-//
+/*
+ * Core SMP Multi-level Round-Robin Scheduler.
+ * Handles context switching, load balancing via work stealing, and task states.
+ * frame is a Pointer to the current interrupt stack frame.
+ * returns The stack pointer (RSP) of the next task to run.
+ */
 uint64_t schedule(interrupt_frame_t* frame) {
     uint64_t f = spin_irq_save();
     cpu_context_t* cpu = get_cpu();
@@ -398,23 +402,23 @@ uint64_t schedule(interrupt_frame_t* frame) {
     return scheduled_next->rsp;
 }
 
-//
-// Bootstraps the scheduler on an Application Processor (AP).
-// Creates a CPU-specific idle context and sets it as the starting task,
-// allowing the AP to begin accepting work from the global task list.
-//
+/*
+ * Bootstraps the scheduler on an Application Processor (AP).
+ * Creates a CPU-specific idle context and sets it as the starting task,
+ * allowing the AP to begin accepting work from the global task list.
+ */
 void sched_init_ap() {
     cpu_context_t* cpu = get_cpu();
     cpu->idle_task = create_idle_struct(idle_task); 
     cpu->current_task = cpu->idle_task;
 }
 
-//
-// Gracefully terminates the current task. Marks it as a ZOMBIE and 
-// moves it to the 'dead_task_list' for asynchronous cleanup.
-// This allows the task to die quickly while the actual memory 
-// deallocation is offloaded to the Reaper (CPU 0).
-//
+/*
+ * Gracefully terminates the current task. Marks it as a ZOMBIE and 
+ * moves it to the 'dead_task_list' for asynchronous cleanup.
+ * This allows the task to die quickly while the actual memory
+ * deallocation is offloaded to the Reaper (CPU 0).
+ */
 void task_exit() {
     // 1. Get current task
     task_t* current = sched_get_current();
@@ -441,11 +445,11 @@ void task_exit() {
     while(1) { sched_yield(); __asm__ volatile("hlt"); }
 }
 
-//
-// The Kernel Reaper: Executed by the Idle task (typically on CPU 0).
-// It drains the 'dead_task_list', unlinks tasks from the global 
-// 'root_task' list, and physically frees their kernel stacks and structures.
-//
+/*
+ * The Kernel Reaper: Executed by the Idle task (typically on CPU 0).
+ * It drains the 'dead_task_list', unlinks tasks from the global
+ * 'root_task' list, and physically frees their kernel stacks and structures. 
+ */
 void sched_reap() {
     if (!dead_task_list) return;
 
@@ -486,6 +490,9 @@ void sched_reap() {
         kprint("[REAPER] Cleaning up TID ");
         kprint_hex(to_clean->tid);
         kprint("\n");
+
+        // Only proper user tasks (TID >= 10) have full memory maps to destroy
+        if (to_clean->tid >= 10) vma_destroy_all(to_clean);
 
         // 3. Finally free space and update "to_clean" list
         kfree((void*)to_clean->stack_base);

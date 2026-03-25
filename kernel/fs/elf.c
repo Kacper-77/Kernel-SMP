@@ -1,92 +1,83 @@
 #include <elf.h>
 #include <vmm.h>
 #include <pmm.h>
+#include <vma.h>
 #include <cpu.h>
 #include <std_funcs.h>
 #include <kmalloc.h>
 #include <serial.h>
+#include <sched.h>
 
-//
-// Helper to copy data from ELF buffer to the newly allocated physical frames
-//
-static void elf_copy_segment(page_table_t* pml4_virt, uintptr_t vaddr, void* src, size_t filesz) {
+/*
+ * Helper to copy data into the newly mapped VMA regions.
+ * We use phys_to_virt to write directly to the physical frames.
+ */
+static void elf_copy_segment(task_t* t, uintptr_t vaddr, void* src, size_t filesz) {
+    page_table_t* pml4_virt = vmm_get_table(t->cr3);
     size_t copied = 0;
+
     while (copied < filesz) {
-        uintptr_t current_vaddr = vaddr + copied;
-        uintptr_t offset_in_page = current_vaddr % PAGE_SIZE;
-        size_t to_copy = PAGE_SIZE - offset_in_page;
+        uintptr_t curr_vaddr = vaddr + copied;
+        uintptr_t offset = curr_vaddr % PAGE_SIZE;
+        size_t to_copy = PAGE_SIZE - offset;
         if (to_copy > (filesz - copied)) to_copy = filesz - copied;
 
-        // Get the physical address of the page we just mapped
-        uintptr_t dest_phys = vmm_virtual_to_physical(pml4_virt, current_vaddr);
+        // Since vma_map already mapped these pages, we just need the phys address
+        uintptr_t dest_phys = vmm_virtual_to_physical(pml4_virt, curr_vaddr);
         if (!dest_phys) return; 
 
-        // Copy using the higher-half direct mapping (phys_to_virt)
-        void* dest_virt = (void*)(phys_to_virt(dest_phys) + offset_in_page);
+        void* dest_virt = (void*)(phys_to_virt(dest_phys) + offset);
         memcpy(dest_virt, (uint8_t*)src + copied, to_copy);
         
         copied += to_copy;
-        kprint("Copying segment to Phys: "); 
-        kprint_hex(dest_phys + offset_in_page); 
-        kprint("\n");
     }
 }
 
-//
-// Loads an ELF64 executable into the given address space (PML4).
-// Allocates and maps memory for PT_LOAD segments, sets correct page flags,
-// copies segment data from the ELF file, and returns the entry point address.
-// Returns 0 if the ELF header is invalid.
-//
-uintptr_t elf_load(uintptr_t pml4_phys, void* elf_data) {
+/*
+ * Loads an ELF64 executable and registers segments as VMAs.
+ */
+uintptr_t elf_load(task_t* t, void* elf_data) {
     Elf64_Ehdr* header = (Elf64_Ehdr*)elf_data;
 
-    // Verify ELF magic number
     if (memcmp(header->e_ident, "\x7F" "ELF", 4) != 0) return 0;
 
-    // Get virtual pointer to the PML4 page table and locate program headers
-    page_table_t* pml4_virt = (page_table_t*)phys_to_virt(pml4_phys);
     Elf64_Phdr* phdr = (Elf64_Phdr*)((uintptr_t)elf_data + header->e_phoff);
-
-    // Disable write protection in CR0 (needed to modify kernel mappings)
-    disable_wp_cr0();
+    uintptr_t max_vaddr = 0;
 
     for (int i = 0; i < header->e_phnum; i++) {
-        // Only load segments marked as PT_LOAD
         if (phdr[i].p_type == PT_LOAD) {
-            // Setup page table flags based on ELF segment permissions
-            uint64_t vmm_flags = PTE_PRESENT | PTE_USER;
-            if (phdr[i].p_flags & PF_W) vmm_flags |= PTE_WRITABLE;
-            if (!(phdr[i].p_flags & PF_X)) vmm_flags |= PTE_NX;
+            // 1. Convert ELF flags to VMA flags
+            uint32_t vma_flags = VMA_USER;
+            if (phdr[i].p_flags & PF_R) vma_flags |= VMA_READ;
+            if (phdr[i].p_flags & PF_W) vma_flags |= VMA_WRITE;
+            if (phdr[i].p_flags & PF_X) vma_flags |= VMA_EXEC;
 
-            uintptr_t start_page = PAGE_ALIGN_DOWN(phdr[i].p_vaddr);
-            uintptr_t end_page = PAGE_ALIGN_UP(phdr[i].p_vaddr + phdr[i].p_memsz);
-            
-            for (uintptr_t vpage = start_page; vpage < end_page; vpage += PAGE_SIZE) {
-
-                // Check if the virtual page is already mapped
-                uintptr_t phys = vmm_virtual_to_physical(pml4_virt, vpage);
-                if (phys == 0) {
-                    uintptr_t frame = (uintptr_t)pmm_alloc_frame();
-                    vmm_map(pml4_virt, vpage, frame, vmm_flags);
-                    memset((void*)phys_to_virt(frame), 0, PAGE_SIZE);
-                } else {
-                    // Update permissions if page already exists
-                    vmm_map(pml4_virt, vpage, phys, vmm_flags); 
-                }
+            // 2. Use vma_map to reserve memory and register it in the task's tree
+            // This also handles PMM allocation and VMM mapping internally.
+            int res = vma_map(t, phdr[i].p_vaddr, phdr[i].p_memsz, vma_flags);
+            if (res != 0) {
+                kprint("[ELF] Failed to map segment at ");
+                kprint_hex(phdr[i].p_vaddr);
+                kprint("\n");
+                return 0;
             }
 
-            // Copy file-backed data into memory
+            // 3. Copy data from the ELF file to the allocated memory
             if (phdr[i].p_filesz > 0) {
-                elf_copy_segment(pml4_virt,
-                    phdr[i].p_vaddr,
-                    (void*)((uintptr_t)elf_data + phdr[i].p_offset),
-                    phdr[i].p_filesz
-                );
+                elf_copy_segment(t, phdr[i].p_vaddr, 
+                                 (void*)((uintptr_t)elf_data + phdr[i].p_offset), 
+                                 phdr[i].p_filesz);
             }
+
+            // Track the end of the program for heap initialization
+            uintptr_t seg_end = phdr[i].p_vaddr + phdr[i].p_memsz;
+            if (seg_end > max_vaddr) max_vaddr = seg_end;
         }
     }
-    // Re-enable WP
-    enable_wp_cr0();
+
+    // Initialize heap pointers right after the last ELF segment
+    t->heap_start = (max_vaddr + PAGE_SIZE) & ~(PAGE_SIZE - 1);
+    t->heap_curr  = t->heap_start;
+
     return header->e_entry;
 }

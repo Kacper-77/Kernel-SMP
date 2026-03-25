@@ -3,13 +3,15 @@
 
 #include <stdint.h>
 
+struct task;
+
 // VMA flags
 #define VMA_READ    (1 << 0)
 #define VMA_WRITE   (1 << 1)
 #define VMA_EXEC    (1 << 2)
 #define VMA_USER    (1 << 3)
 #define VMA_STACK   (1 << 4) 
-#define VMA_HEAP    (1 << 5) 
+#define VMA_HEAP    (1 << 5)
 
 typedef struct vma_area {
     uintptr_t vm_start;    // Start (Aligned)

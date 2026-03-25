@@ -6,21 +6,21 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 
-//
-// Initializes VMA-related fields for a new task.
-// Called during task_alloc_base() form context.c.
-//
-void vma_init_task(task_t* t) {
+/*
+ * Initializes VMA-related fields for a new task.
+ * Called during task_alloc_base() form context.c.
+ */
+void vma_init_task(struct task* t) {
     t->vma_tree_root = NULL;
     t->vma_list_head = NULL;
     t->vma_count = 0;
     t->vma_lock  = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
 }
 
-//
-// Searches the RB-Tree (currently BST) for an area containing 'addr'.
-//
-vma_area_t* vma_find(task_t* t, uintptr_t addr) {
+/*
+ * Searches the RB-Tree (currently BST) for an area containing 'addr'.
+ */
+vma_area_t* vma_find(struct task* t, uintptr_t addr) {
     vma_area_t* curr = t->vma_tree_root;
 
     while (curr) {
@@ -35,14 +35,14 @@ vma_area_t* vma_find(task_t* t, uintptr_t addr) {
     return NULL;
 }
 
-//
-// High-level mapping function:
-// 1. Checks for overlaps.
-// 2. Allocates VMA descriptor via kmalloc.
-// 3. Allocates physical frames via PMM.
-// 4. Maps pages in the task's specific PML4.
-//
-int vma_map(task_t* t, uintptr_t addr, uint64_t size, uint32_t flags) {
+/*
+ * High-level mapping function:
+ * 1. Checks for overlaps.
+ * 2. Allocates VMA descriptor via kmalloc.
+ * 3. Allocates physical frames via PMM.
+ * 4. Maps pages in the task's specific PML4.
+ */
+int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     if (size == 0) return -1;
     
     // Page align size and address
@@ -56,7 +56,7 @@ int vma_map(task_t* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     while (check) {
         if (addr < check->vm_end && (addr + size) > check->vm_start) {
             spin_unlock(&t->vma_lock);
-            return -2; // Collision detected
+            return -2;
         }
         check = check->next;
     }
@@ -84,7 +84,8 @@ int vma_map(task_t* t, uintptr_t addr, uint64_t size, uint32_t flags) {
 
     // 4. Update Page Tables (VMM)
     uint32_t vmm_opts = PTE_PRESENT | PTE_USER;
-    if (flags & VMA_WRITE) vmm_opts |= PTE_WRITABLE;
+    if (flags & VMA_WRITE) vmm_opts   |= PTE_WRITABLE;
+    if (!(flags & VMA_EXEC)) vmm_opts |= PTE_NX; 
     
     // We map directly into the task's PML4
     vmm_map_range(vmm_get_table(t->cr3), addr, (uintptr_t)phys, size, vmm_opts);
@@ -118,63 +119,93 @@ int vma_map(task_t* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     return 0;
 }
 
-//
-// Unmaps an area, releases physical frames, and destroys the VMA descriptor.
-//
-int vma_unmap(task_t* t, uintptr_t addr) {
+/*
+ * Unmaps an area, releases physical frames, and destroys the VMA descriptor.
+ */
+int vma_unmap(struct task* t, uintptr_t addr) {
     spin_lock(&t->vma_lock);
 
+    // 1. Locate the VMA area containing the address
     vma_area_t* vma = vma_find(t, addr);
+    
+    // Safety check: ensure VMA exists and 'addr' is the exact start of the region
     if (!vma || vma->vm_start != addr) {
         spin_unlock(&t->vma_lock);
         return -1;
     }
 
-    uint64_t size = vma->vm_end - vma->vm_start;
-    
-    // 1. Get physical address from VMM to free it in PMM
-    uintptr_t phys = vmm_get_phys(vmm_get_table(t->cr3), addr);
-    
-    // 2. Clear Page Tables
-    vmm_unmap_range(vmm_get_table(t->cr3), addr, size);
-    
-    // 3. Free Physical Frames
-    pmm_free_frames((void*)phys, size / 4096);
+    page_table_t* pml4 = vmm_get_table(t->cr3);
+    uintptr_t start = vma->vm_start;
+    uintptr_t end   = vma->vm_end;
 
-    // 4. Remove from List
+    // 2. Iterate through the range and release resources page-by-page
+    for (uintptr_t vaddr = start; vaddr < end; vaddr += PAGE_SIZE) {
+        uintptr_t phys = vmm_virtual_to_physical(pml4, vaddr);
+        if (phys) {
+            // Remove entry from Page Tables (VMM)
+            vmm_unmap(pml4, vaddr);
+            // Return the physical frame to the PMM bitmap/stack
+            pmm_free_frame((void*)phys);
+        }
+    }
+
+    // 3. Remove from the doubly-linked list
     if (vma->prev) vma->prev->next = vma->next;
     if (vma->next) vma->next->prev = vma->prev;
-    if (t->vma_list_head == vma) t->vma_list_head = vma->next;
+    if (t->vma_list_head == vma) {
+        t->vma_list_head = vma->next;
+    }
 
-    // 5. Remove from Tree
-    if (vma == t->vma_tree_root) t->vma_tree_root = NULL;
+    // 4. Remove from the BST (Simplified removal logic)
+    if (t->vma_tree_root == vma) {
+        // If it's the root, promote a child or clear if leaf
+        if (!vma->left && !vma->right) {
+            t->vma_tree_root = NULL;
+        } else {
+            t->vma_tree_root = vma->left ? vma->left : vma->right;
+            t->vma_tree_root->parent = NULL;
+        }
+    } else {
+        // If it's a child node, detach from parent
+        if (vma->parent) {
+            if (vma->parent->left == vma) vma->parent->left = NULL;
+            else if (vma->parent->right == vma) vma->parent->right = NULL;
+        }
+    }
 
     t->vma_count--;
+    
+    // 5. Free the VMA descriptor from the Kernel Heap
     kfree(vma);
 
     spin_unlock(&t->vma_lock);
     return 0;
 }
 
-//
-// Iterates through the VMA list and releases EVERYTHING.
-// Crucial for the Reaper/task_exit to prevent memory leaks.
-//
-void vma_destroy_all(task_t* t) {
+/*
+ * Iterates through the VMA list and releases EVERYTHING.
+ * Crucial for the Reaper/task_exit to prevent memory leaks.
+ */
+void vma_destroy_all(struct task* t) {
     spin_lock(&t->vma_lock);
-    
+
+    page_table_t* pml4 = vmm_get_table(t->cr3);
     vma_area_t* curr = t->vma_list_head;
+
     while (curr) {
         vma_area_t* next = curr->next;
+        uintptr_t start  = curr->vm_start;
+        uintptr_t end    = curr->vm_end;
         
-        uint64_t size = curr->vm_end - curr->vm_start;
-        uintptr_t phys = vmm_get_phys(vmm_get_table(t->cr3), curr->vm_start);
+        for (uintptr_t vaddr = start; vaddr < end; vaddr += PAGE_SIZE) {
+            uintptr_t phys   = vmm_virtual_to_physical(pml4, vaddr);
+            
+            if (phys) {
+                vmm_unmap(pml4, vaddr);
+                pmm_free_frame((void*)phys);
+            }
+        }
         
-        // Cleanup HW resources
-        vmm_unmap_range(vmm_get_table(t->cr3), curr->vm_start, size);
-        pmm_free_frames((void*)phys, size / 4096);
-        
-        // Free descriptor
         kfree(curr);
         curr = next;
     }
