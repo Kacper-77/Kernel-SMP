@@ -124,10 +124,9 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
     uint64_t u_stack_size = 4 * PAGE_SIZE;
     if (vma_map(t, u_stack_virt, u_stack_size, VMA_READ | VMA_WRITE | VMA_USER | VMA_STACK) != 0) return NULL;
 
-    if (vma_map(t, t->heap_start, 4 * PAGE_SIZE, VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP) != 0) return NULL;
-
-    // 3. Initialize Heap Pointer (Heap starts after code area)
-    t->heap_curr  = t->heap_start + 4 * PAGE_SIZE;
+    // 3. Initialize Heap Pointer
+    t->heap_start = 0x406000;
+    t->heap_curr  = t->heap_start;
 
     // Setup the interrupt frame for Ring 3 transition (iretq)
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL; 
@@ -167,9 +166,8 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
     uintptr_t u_stack_virt = 0x00007FFFFFFFF000 - (4 * PAGE_SIZE);
     uint64_t u_stack_size = 4 * PAGE_SIZE;
     if (vma_map(t, u_stack_virt, u_stack_size, VMA_READ | VMA_WRITE | VMA_USER | VMA_STACK) != 0) return NULL;
-
-    if (vma_map(t, t->heap_start, 4 * PAGE_SIZE, VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP) != 0) return NULL;
-    t->heap_curr  = t->heap_start + 4 * PAGE_SIZE;
+    
+    t->heap_curr  = t->heap_start;
 
     // 3. Setup Kernel Stack Frame
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;

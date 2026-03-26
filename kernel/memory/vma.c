@@ -49,6 +49,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     size = (size + 0xFFF) & ~0xFFFULL;
     if (addr & 0xFFF) return -1;
 
+    uint64_t f = spin_irq_save();
     spin_lock(&t->vma_lock);
 
     // 1. Simple overlap check using the linked list
@@ -56,6 +57,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     while (check) {
         if (addr < check->vm_end && (addr + size) > check->vm_start) {
             spin_unlock(&t->vma_lock);
+            spin_irq_restore(f);
             return -2;
         }
         check = check->next;
@@ -65,6 +67,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     vma_area_t* new_vma = kmalloc(sizeof(vma_area_t));
     if (!new_vma) {
         spin_unlock(&t->vma_lock);
+        spin_irq_restore(f);
         return -3;
     }
     memset(new_vma, 0, sizeof(vma_area_t));
@@ -79,6 +82,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     if (!phys) {
         kfree(new_vma);
         spin_unlock(&t->vma_lock);
+        spin_irq_restore(f);
         return -4;
     }
 
@@ -116,6 +120,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
 
     t->vma_count++;
     spin_unlock(&t->vma_lock);
+    spin_irq_restore(f);
     return 0;
 }
 
@@ -123,6 +128,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
  * Unmaps an area, releases physical frames, and destroys the VMA descriptor.
  */
 int vma_unmap(struct task* t, uintptr_t addr) {
+    uint64_t f = spin_irq_save();
     spin_lock(&t->vma_lock);
 
     // 1. Locate the VMA area containing the address
@@ -131,6 +137,7 @@ int vma_unmap(struct task* t, uintptr_t addr) {
     // Safety check: ensure VMA exists and 'addr' is the exact start of the region
     if (!vma || vma->vm_start != addr) {
         spin_unlock(&t->vma_lock);
+        spin_irq_restore(f);
         return -1;
     }
 
@@ -179,6 +186,8 @@ int vma_unmap(struct task* t, uintptr_t addr) {
     kfree(vma);
 
     spin_unlock(&t->vma_lock);
+    spin_irq_restore(f);
+
     return 0;
 }
 
@@ -187,6 +196,7 @@ int vma_unmap(struct task* t, uintptr_t addr) {
  * Crucial for the Reaper/task_exit to prevent memory leaks.
  */
 void vma_destroy_all(struct task* t) {
+    uint64_t f = spin_irq_save();
     spin_lock(&t->vma_lock);
 
     page_table_t* pml4 = vmm_get_table(t->cr3);
@@ -215,4 +225,5 @@ void vma_destroy_all(struct task* t) {
     t->vma_count = 0;
     
     spin_unlock(&t->vma_lock);
+    spin_irq_restore(f);
 }

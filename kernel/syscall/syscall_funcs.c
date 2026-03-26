@@ -8,6 +8,7 @@
 #include <smp.h>
 #include <vmm.h>
 #include <pmm.h>
+#include <vma.h>
 #include <std_funcs.h>
 
 #include <stdint.h>
@@ -16,9 +17,9 @@
 #define KERNEL_SPACE_START 0xFFFF800000000000
 #define USER_SPACE_END     0x00007FFFFFFFFFFF
 
-//
-// HELPERS
-//
+/*
+ * HELPERS
+ */
 static bool is_user_range(const void* addr, size_t size) {
     uintptr_t start = (uintptr_t)addr;
     uintptr_t end = start + size;
@@ -61,9 +62,9 @@ static uint64_t sys_kprint_hex(uint64_t value) {
     return 0;
 }
 
-//
-// FUNCS WRAPPERS
-//
+/*
+ * FUNCS WRAPPERS
+ */
 uint64_t sys_kprint_handler(interrupt_frame_t* frame) {
     return sys_kprint((const char*)frame->rdi);
 }
@@ -116,26 +117,38 @@ uint64_t sys_malloc_handler(interrupt_frame_t* frame) {
     size_t size = frame->rdi;
     task_t* current = sched_get_current();
 
-    uint64_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-    void* phys = pmm_alloc_frames(pages);
-    if (!phys) return 0;
+    size_t aligned_size = (size + 0xFFF) & ~0xFFFULL;
 
-    vmm_map_range(vmm_get_table(current->cr3), current->heap_curr, 
-                  (uintptr_t)phys, pages * PAGE_SIZE, 
-                  PTE_PRESENT | PTE_WRITABLE | PTE_USER);
-
-    uintptr_t ret = current->heap_curr;
-    current->heap_curr += (pages * PAGE_SIZE);
-
-    memset((void*)phys_to_virt((uintptr_t)phys), 0, pages * PAGE_SIZE);
+    // Map new memory using VMA
+    int res = vma_map(current, current->heap_curr, aligned_size, 
+                      VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP);
     
-    return (uint64_t)ret;
+    if (res != 0) {
+        return 0;
+    }
+
+    uintptr_t allocated_addr = current->heap_curr;
+    
+    // Advance the heap cursor
+    current->heap_curr += aligned_size;
+    
+    return (uint64_t)allocated_addr;
 }
 
 uint64_t sys_free_handler(interrupt_frame_t* frame) {
-    (void)frame;
-    // !!! VMA !!!
-    return 0;
+    uintptr_t addr = (uintptr_t)frame->rdi;
+    if (addr == 0) return -1;
+
+    task_t* current = sched_get_current();
+
+    // vma_unmap will:
+    // - find the area in BST/List
+    // - free all physical frames in PMM
+    // - remove entries from Page Tables
+    // - kfree the descriptor
+    int res = vma_unmap(current, addr);
+
+    return (res == 0) ? 0 : (uint64_t)-1;
 }
 
 uint64_t sys_get_tid_handler(interrupt_frame_t* frame) {
@@ -148,9 +161,9 @@ uint64_t sys_cpu_count_handler(interrupt_frame_t* frame) {
     return (uint64_t)get_cpu_count_test();
 }
 
-//
-// INIT SYS TABLE
-//
+/*
+ * INIT SYS TABLE
+ */
 void init_sys_table() {
     sys_table[SYS_KPRINT]     = sys_kprint_handler;
     sys_table[SYS_EXIT]       = sys_exit_handler;
