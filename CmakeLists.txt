@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 set(CMAKE_SYSTEM_NAME Generic)
 
-# Clang
+# Set Clang 
 set(CMAKE_C_COMPILER "clang")
 set(CMAKE_ASM_COMPILER "clang")
 
 project(KernelSMP C ASM)
 
+# Shared directory
 include_directories(${CMAKE_SOURCE_DIR}/common)
 
 # Subdirectories
