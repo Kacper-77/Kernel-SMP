@@ -20,7 +20,9 @@ extern syscall_ptr_t sys_table[20];
 #define SYS_GET_TID     11
 #define SYS_CPU_COUNT   12
 
-// Global initialization of jump table
+/* 
+ * Global initialization of jump table 
+ */
 void init_sys_table();
 
 #endif

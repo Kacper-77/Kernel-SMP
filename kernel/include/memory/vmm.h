@@ -9,12 +9,12 @@
 
 #define PAGE_SIZE 4096
 
-// Physical address where the kernel is loaded
+/* Physical address where the kernel is loaded */
 #define KERNEL_PHYS_BASE 0x2000000
-// Virtual address where the kernel starts
+/* Virtual address where the kernel starts */
 #define KERNEL_VIRT_BASE 0xFFFFFFFF80000000
 
-// Page Table Entry Flags
+/* Page Table Entry Flags */
 #define PTE_PRESENT     (1ULL << 0)  // Page is in memory
 #define PTE_WRITABLE    (1ULL << 1)  // Page can be written to
 #define PTE_USER        (1ULL << 2)  // Page accessible by user-mode
@@ -32,16 +32,16 @@ typedef struct {
     pt_entry entries[512];
 } page_table_t;
 
-// Get indices from virtual address
+/* Get indices from virtual address */
 #define PML4_IDX(addr) (((addr) >> 39) & 0x1FF)
 #define PDPT_IDX(addr) (((addr) >> 30) & 0x1FF)
 #define PD_IDX(addr)   (((addr) >> 21) & 0x1FF)
 #define PT_IDX(addr)   (((addr) >> 12) & 0x1FF)
 
-// Align an address down to page boundary
+/* Align an address down to page boundary */
 #define PAGE_ALIGN_DOWN(addr) ((addr) & ~0xFFFULL)
 
-// Align an address up to page boundary
+/* Align an address up to page boundary */
 #define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFFULL)
 
 void vmm_init(BootInfo* bi);
@@ -59,11 +59,11 @@ void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size);
 page_table_t* vmm_get_pml4();
 uintptr_t vmm_get_pml4_phys();
 
-//
-// Invalidates a single page in the TLB (Translation Lookaside Buffer).
-// Must be called after changing an existing mapping to ensure the CPU
-// doesn't use stale data from its internal cache.
-//
+/*
+ * Invalidates a single page in the TLB (Translation Lookaside Buffer).
+ * Must be called after changing an existing mapping to ensure the CPU
+ * doesn't use stale data from its internal cache.
+ */
 static inline void vmm_invlpg(void* addr) {
     __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
 }

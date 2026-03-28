@@ -7,7 +7,7 @@
 #include <efi_descriptor.h>
 #include <apic.h>
 
-// Default addr mask
+/* Default addr mask and default HHDM OFFSET */
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
 #define HHDM_OFFSET 0xFFFF800000000000
 
@@ -16,7 +16,7 @@ static spinlock_t vmm_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 page_table_t* kernel_pml4 = NULL;
 static uintptr_t kernel_pml4_phys = 0;
 
-// Symbols from the linker script
+/* Symbols from the linker script */
 extern uint8_t _kernel_start[];
 extern uint8_t _kernel_end[];
 extern uint8_t _text_start[], _text_end[];
@@ -28,11 +28,11 @@ static void sync_tlb() {
     lapic_wait_for_delivery();
 }
 
-//
-// Configures the Page Attribute Table (PAT) MSR to define 
-// memory caching types. We set PAT4 to Write-Combining (WC) 
-// for high-performance framebuffer access.
-//
+/*
+ * Configures the Page Attribute Table (PAT) MSR to define 
+ * memory caching types. We set PAT4 to Write-Combining (WC) 
+ * for high-performance framebuffer access.
+ */
 void vmm_enable_pat() {
     uint32_t low, high;
     __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(0x277));
@@ -118,9 +118,9 @@ void vmm_destroy_user_pml4(uintptr_t cr3, bool free_frames) {
     sync_tlb(); // Flush TLB
 }
 
-//
-// UNLOCKED SECTION
-//
+/*
+ * UNLOCKED SECTION
+ */
 static void _vmm_unmap_unlocked(page_table_t* pml4, uintptr_t virt) {
     uint64_t pml4_i = PML4_IDX(virt);
     uint64_t pdpt_i = PDPT_IDX(virt);
@@ -197,10 +197,10 @@ static bool _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_
     return true;
 }
 
-//
-// Maps a virtual page to a physical frame.
-// If intermediate tables don't exist, they are allocated using PMM.
-//
+/*
+ * Maps a virtual page to a physical frame.
+ * If intermediate tables don't exist, they are allocated using PMM.
+ */
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
@@ -218,10 +218,10 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
     }
 }
 
-//
-// Maps a contiguous range of virtual pages to a contiguous range of physical frames.
-// Automatically handles TLB invalidation for the entire range.
-//
+/*
+ * Maps a contiguous range of virtual pages to a contiguous range of physical frames.
+ * Automatically handles TLB invalidation for the entire range.
+ */
 void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
@@ -239,7 +239,9 @@ void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t 
     }
 }
 
-// 2MB - !!! WILL BE CHANGED !!!
+/*
+ * !!! HUGE PAGES FOR NOW UNUSED !!!
+ */
 void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags) {
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
@@ -270,11 +272,11 @@ void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t f
     spin_irq_restore(f);
 }
 
-//
-// Maps Memory Mapped I/O (MMIO) devices.
-// Uses Write-Combining (via PAT4) for performance, while 
-// ensuring No-Execute (NX) and Writable permissions.
-//
+/*
+ * Maps Memory Mapped I/O (MMIO) devices.
+ * Uses Write-Combining (via PAT4) for performance, while 
+ * ensuring No-Execute (NX) and Writable permissions.
+ */
 void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size) {
     uintptr_t phys_aligned = PAGE_ALIGN_DOWN(phys);
     uintptr_t offset = phys - phys_aligned;
@@ -288,9 +290,9 @@ void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_
     return (void*)(virt + offset);
 }
 
-//
-// Cleanig Identity-Mapping
-//
+/*
+ * Cleanig Identity-Mapping
+ */
 void vmm_unmap(page_table_t* pml4, uintptr_t virt) {
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
@@ -330,10 +332,10 @@ void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {
     spin_irq_restore(f);
 }
 
-//
-// Performs a "Page Walk" to translate a virtual address to its physical counterpart.
-// Returns the physical address or 0 if the page is not mapped.
-//
+/*
+ * Performs a "Page Walk" to translate a virtual address to its physical counterpart.
+ * Returns the physical address or 0 if the page is not mapped.
+ */
 uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt) {
     if (!(pml4->entries[PML4_IDX(virt)] & PTE_PRESENT)) return 0;
     page_table_t* pdpt = vmm_get_table(pml4->entries[PML4_IDX(virt)] & VMM_ADDR_MASK);
@@ -354,17 +356,17 @@ uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt) {
     return (pt->entries[PT_IDX(virt)] & VMM_ADDR_MASK) + (virt & 0xFFF);
 }
 
-//
-// Transform PA -> VA
-//
+/*
+ * Transform PA -> VA, by adding HHDM offset
+ */
 uintptr_t phys_to_virt(uintptr_t phys) {
     return phys + HHDM_OFFSET;
 }
 
-//
-// Initializes paging by creating a new PML4, identity mapping critical regions,
-// and performing the switch via CR3 and segment reloading.
-//
+/*
+ * Initializes paging by creating a new PML4, identity mapping critical regions,
+ * and performing the switch via CR3 and segment reloading.
+ */
 void vmm_init(BootInfo* bi) {
     vmm_enable_pat();
     // CRITICAL: Use a local pointer (stored on the stack) instead of the global 'kernel_pml4'.
@@ -476,9 +478,9 @@ void vmm_init(BootInfo* bi) {
     enable_wp_cr0();
 }
 
-//
-// GETTERS
-//
+/*
+ * GETTERS
+ */
 page_table_t* vmm_get_pml4() {
     return kernel_pml4;
 }

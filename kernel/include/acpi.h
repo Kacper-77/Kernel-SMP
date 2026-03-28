@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-// SDT for all tables
+/* SDT for all tables */
 typedef struct {
     char signature[4];
     uint32_t length;
@@ -16,7 +16,7 @@ typedef struct {
     uint32_t creator_revision;
 } __attribute__((packed)) acpi_sdt_header_t;
 
-// Root System Description Pointer (RSDP)
+/* Root System Description Pointer (RSDP) */
 typedef struct {
     char     signature[8];
     uint8_t  checksum;
@@ -29,19 +29,19 @@ typedef struct {
     uint8_t  reserved[3];
 } __attribute__((packed)) acpi_rsdp_t;
 
-// RSDT
+/* RSDT */
 typedef struct {
     acpi_sdt_header_t header;
     uint32_t tables[];
 } __attribute__((packed)) acpi_rsdt_t;
 
-// XSDT
+/* XSDT */
 typedef struct {
     acpi_sdt_header_t header;
     uint64_t tables[];
 } __attribute__((packed)) acpi_xsdt_t;
 
-// MADT
+/* MADT */
 typedef struct {
     acpi_sdt_header_t header;
     uint32_t local_apic_address;
@@ -53,7 +53,7 @@ typedef struct {
     uint8_t length;
 } __attribute__((packed)) acpi_madt_entry_t;
 
-// Processor Local APIC
+/* Processor Local APIC */
 typedef struct {
     acpi_madt_entry_t header;
     uint8_t processor_id;

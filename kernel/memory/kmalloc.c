@@ -13,9 +13,7 @@
 static spinlock_t heap_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
 static m_header_t* heap_start = NULL;
 
-//
-// DIAGNOSTIC
-//
+/* DIAGNOSTIC */
 void kmalloc_dump() {
     uint64_t f = spin_irq_save();
     spin_lock(&heap_lock_); 
@@ -35,12 +33,12 @@ void kmalloc_dump() {
     spin_irq_restore(f);
 }
 
-//
-// Initializes the kernel heap by allocating the first physical frame.
-// Sets up the initial free block header and protects the operation with a spinlock
-// to ensure BSP/AP synchronization during early boot.
-// SLAB included.
-//
+/*
+ * Initializes the kernel heap by allocating the first physical frame.
+ * Sets up the initial free block header and protects the operation with a spinlock
+ * to ensure BSP/AP synchronization during early boot.
+ * SLAB included.
+ */
 void kmalloc_init() {
     void* first_frame = pmm_alloc_frame();
     if (!first_frame) {
@@ -61,11 +59,11 @@ void kmalloc_init() {
     slab_init();  // SLAB initialization
 }
 
-//
-// Hybrid allocator: 
-// - Routes small requests (<=2048B) to the SLAB allocator.
-// - Uses First-Fit with block splitting for larger heap allocations.
-//
+/*
+ * Hybrid allocator: 
+ * - Routes small requests (<=2048B) to the SLAB allocator.
+ * - Uses First-Fit with block splitting for larger heap allocations.
+ */
 void* kmalloc(size_t size) {
     if (size == 0) return NULL;
 
@@ -166,11 +164,11 @@ void* kmalloc(size_t size) {
     return (void*)((uintptr_t)new_block + sizeof(m_header_t));
 }
 
-//
-// Frees a previously allocated memory block and performs immediate coalescing.
-// Checks for heap corruption via magic numbers and guards against double-free.
-// Adjacent free blocks are merged to maintain large contiguous memory regions.
-//
+/*
+ * Frees a previously allocated memory block and performs immediate coalescing.
+ * Checks for heap corruption via magic numbers and guards against double-free.
+ * Adjacent free blocks are merged to maintain large contiguous memory regions.
+ */
 void kfree(void* ptr) {
     if (!ptr) return;
 

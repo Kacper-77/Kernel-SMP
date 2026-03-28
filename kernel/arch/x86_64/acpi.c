@@ -5,6 +5,10 @@
 
 #include <stdbool.h>
 
+/*
+ * Searches ACPI system tables for a specific signature.
+ * Prioritizes XSDT (64-bit) over RSDT (32-bit) if ACPI 2.0+ is supported.
+ */
 void* acpi_find_table(acpi_rsdp_t* rsdp, char* signature) {
     bool use_xsdt = (rsdp->revision >= 2 && rsdp->xsdt_address != 0);
     

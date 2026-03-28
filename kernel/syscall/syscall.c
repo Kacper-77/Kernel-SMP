@@ -4,10 +4,10 @@
 
 #include <stddef.h>
 
-//
-// Handle syscalls based on sys_table (jump table),
-// all syscalls are wrapped in syscall_funcs.c
-//
+/*
+ * Handle syscalls based on sys_table (jump table),
+ * all syscalls are wrapped in syscall_funcs.c
+ */
 uint64_t syscall_handler(interrupt_frame_t* frame) {
     // Fetch syscall from RAX
     uintptr_t sys_num = frame->rax;

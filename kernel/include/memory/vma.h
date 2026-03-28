@@ -5,7 +5,7 @@
 
 struct task;
 
-// VMA flags
+/* VMA flags */
 #define VMA_READ    (1 << 0)
 #define VMA_WRITE   (1 << 1)
 #define VMA_EXEC    (1 << 2)

@@ -5,23 +5,23 @@
 #include <serial.h>
 #include <panic.h>
 
-// Pointer to the memory-mapped APIC registers
+/* Pointer to the memory-mapped APIC registers */
 volatile uint32_t* lapic_base = NULL;
 volatile uint64_t global_ticks_per_ms = 0;
 
-// Write a 32-bit value to a Local APIC register.
+/* Write a 32-bit value to a Local APIC register. */
 void lapic_write(uint32_t reg, uint32_t data) {
     *(volatile uint32_t*)((uintptr_t)lapic_base + reg) = data;
 }
 
-// Read a 32-bit value from a Local APIC register.
+/* Read a 32-bit value from a Local APIC register. */
 uint32_t lapic_read(uint32_t reg) {
     return *(volatile uint32_t*)((uintptr_t)lapic_base + reg);
 }
 
-//
-// Initialize the Local APIC for the current CPU
-//
+/*
+ * Initialize the Local APIC for the current CPU
+ */
 void lapic_init(uintptr_t virt_addr) {
     lapic_base = (uint32_t*)virt_addr;
 
@@ -55,11 +55,11 @@ void lapic_init_ap() {
     lapic_write(LAPIC_ESR, 0);
 }
 
-//
-// Calibrates the Local APIC timer frequency using the legacy PIT as a reference.
-// The BSP performs the actual measurement (10ms window), while APs wait for the result
-// to ensure synchronized timekeeping across all 32 cores.
-//
+/*
+ * Calibrates the Local APIC timer frequency using the legacy PIT as a reference.
+ * The BSP performs the actual measurement (10ms window), while APs wait for the result
+ * to ensure synchronized timekeeping across all 32 cores.
+ */
 static cpu_context_t* lapic_timer_calibrate() {
     cpu_context_t* cpu = get_cpu();
 
@@ -89,11 +89,11 @@ static cpu_context_t* lapic_timer_calibrate() {
     return cpu;
 }
 
-//
-// Enables the Local APIC timer in periodic mode for the current CPU.
-// Uses the pre-calculated calibration values to trigger interrupts 
-// at the specified millisecond interval on the given IDT vector.
-//
+/*
+ * Enables the Local APIC timer in periodic mode for the current CPU.
+ * Uses the pre-calculated calibration values to trigger interrupts 
+ * at the specified millisecond interval on the given IDT vector.
+ */
 void lapic_timer_init(uint32_t ms_interval, uint8_t vector) {
     cpu_context_t* cpu = lapic_timer_calibrate();
     
@@ -109,11 +109,11 @@ void lapic_timer_init(uint32_t ms_interval, uint8_t vector) {
     lapic_write(LAPIC_TICR, cpu->lapic_ticks_per_ms * ms_interval);
 }
 
-//
-// Waits for the Local APIC to finish delivering the previous interrupt (IPI).
-// Checks the Delivery Status bit in the ICR. Includes a safety timeout 
-// to prevent infinite hangs if the APIC bus becomes unresponsive.
-//
+/*
+ * Waits for the Local APIC to finish delivering the previous interrupt (IPI).
+ * Checks the Delivery Status bit in the ICR. Includes a safety timeout 
+ * to prevent infinite hangs if the APIC bus becomes unresponsive.
+ */
 void lapic_wait_for_delivery() {
     uint64_t timeout = 1000000;
 
@@ -126,9 +126,9 @@ void lapic_wait_for_delivery() {
         panic("FATAL: LAPIC IPI delivery stuck!\n");
 }
 
-//
-// Allows to send interrupt to core (by it's ID)
-//
+/*
+ * Allows to send interrupt to core (by it's ID)
+ */
 void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector) {
     lapic_wait_for_delivery();
     
@@ -139,9 +139,9 @@ void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector) {
     lapic_write(LAPIC_ICR_LOW, ICR_ASSERT | ICR_EDGE | ICR_FIXED | vector);
 }
 
-//
-// Send interrupt to all cores, except one who called it.
-//
+/*
+ * Send interrupt to all cores, except one who called it.
+ */
 void lapic_broadcast_ipi(uint8_t vector) {
     lapic_wait_for_delivery();
     lapic_write(LAPIC_ICR_LOW, ICR_SHORTHAND_OTHERS | ICR_ASSERT | ICR_EDGE | ICR_FIXED | vector);

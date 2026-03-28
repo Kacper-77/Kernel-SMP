@@ -4,16 +4,16 @@
 
 #include <stdint.h>
 
-//
-// External assembly helper to flush segment registers.
-// After lgdt, we must perform a far return or far jump to update CS,
-// and manually reload data segments (DS, ES, SS, FS, GS).
-//
+/*
+ * External assembly helper to flush segment registers.
+ * After lgdt, we must perform a far return or far jump to update CS,
+ * and manually reload data segments (DS, ES, SS, FS, GS).
+ */
 extern void gdt_flush(uint64_t gdtr_ptr);
 
-//
-// SETUP FOR CPU
-//
+/*
+ * SETUP FOR CPU
+ */
 void gdt_setup_for_cpu(cpu_context_t* ctx) {
     memset(&ctx->gdt, 0, sizeof(cpu_gdt_t));
 

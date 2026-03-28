@@ -11,7 +11,7 @@ static char log_buffer[BUFFER_SIZE];
 static uint32_t log_head = 0;
 static uint32_t log_tail = 0;
 
-// Puts char in buffer
+/* Puts char in buffer */
 static void log_putc(char c) {
     uint32_t next = (log_head + 1) % BUFFER_SIZE;
     

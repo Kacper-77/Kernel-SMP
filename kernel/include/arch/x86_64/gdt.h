@@ -4,7 +4,7 @@
 #include <cpu.h>
 #include <stdint.h>
 
-// GDT Descriptor
+/* GDT Descriptor */
 struct gdt_entry_descriptor {
     uint16_t limit_low;
     uint16_t base_low;
@@ -14,7 +14,7 @@ struct gdt_entry_descriptor {
     uint8_t  base_high;
 } __attribute__((packed));
 
-// TSS Descriptor
+/* TSS Descriptor */
 struct gdt_tss_descriptor {
     uint16_t limit_low;
     uint16_t base_low;
@@ -26,11 +26,11 @@ struct gdt_tss_descriptor {
     uint32_t reserved;
 } __attribute__((packed));
 
-//
-// Initializes the Descriptor Table.
-// Sets up Null, Kernel Code, and Kernel Data segments,
-// then flushes the segment registers.
-//
+/*
+ * Initializes the Descriptor Table.
+ * Sets up Null, Kernel Code, and Kernel Data segments,
+ * then flushes the segment registers.
+ */
 void gdt_setup_for_cpu(cpu_context_t* ctx);
 
 #endif

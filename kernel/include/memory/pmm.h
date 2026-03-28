@@ -16,9 +16,4 @@ void* pmm_alloc_frames(size_t count);
 void pmm_free_frame(void* frame);
 void pmm_move_to_high_half();
 
-// Internal helper functions
-void pmm_set_frame(uint64_t frame_addr);
-void pmm_unset_frame(uint64_t frame_addr);
-int pmm_is_frame_set(uint64_t frame_addr);
-
 #endif

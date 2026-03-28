@@ -19,10 +19,10 @@ static char kbd_buffer[KBD_BUF_SIZE];
 static volatile int kbd_head = 0; 
 static volatile int kbd_tail = 0;
 
-//
-// Main keyboard handler, extracting chars from PS2 sets
-// by passed scancodes
-//
+/*
+ * Main keyboard handler, extracting chars from PS2 sets
+ * by passed scancodes
+ */
 void ps2_keyboard_handler() {
     uint64_t f = spin_irq_save();
     spin_lock(&kbd_lock_);
@@ -57,9 +57,9 @@ void ps2_keyboard_handler() {
     spin_irq_restore(f);
 }
 
-//
-// Pushing char to Circular Buffer - nessesary for Ring 3
-//
+/*
+ * Pushing char to Circular Buffer - nessesary for Ring 3
+ */
 void kbd_push_char(char c) {
     int next = (kbd_head + 1) % KBD_BUF_SIZE;
     if (next != kbd_tail) {
@@ -68,9 +68,9 @@ void kbd_push_char(char c) {
     }
 }
 
-//
-// Pops char from Circular Buffer
-//
+/*
+ * Pops char from Circular Buffer
+ */
 bool kbd_pop_char(char* out_char) {
     uint64_t f = spin_irq_save();
     spin_lock(&kbd_lock_);

@@ -34,7 +34,7 @@ typedef struct gdt_entry {
     uint8_t  base_high;
 } __attribute__((packed)) gdt_entry_t;
 
-// Descriptor TSS
+/* Descriptor TSS */
 typedef struct gdt_tss_entry {
     uint16_t limit_low;
     uint16_t base_low;
@@ -85,7 +85,9 @@ typedef struct cpu_context {
 
 extern cpu_context_t* cpu_table[32];
 
-// Initialization of BSP and SYSCALLS
+/* 
+ * Initialization of BSP and SYSCALLS 
+ */
 void cpu_init_bsp();
 void cpu_init_syscalls();
 
@@ -112,9 +114,9 @@ static inline void cpu_enable_sse() {
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
 }
 
-//
-// CR3 READ AND WRITE
-//
+/*
+ * CR3 READ AND WRITE
+ */
 static inline uint64_t read_cr3(void) {
     uint64_t val;
     __asm__ volatile("mov %%cr3, %0" : "=r"(val));
@@ -125,9 +127,9 @@ static inline void write_cr3(uint64_t val) {
     __asm__ volatile("mov %0, %%cr3" : : "r"(val) : "memory");
 }
 
-//
-// MSR READ AND WRITE
-//
+/*
+ * MSR READ AND WRITE
+ */
 static inline uint64_t read_msr(uint32_t msr) {
     uint32_t low, high;
     __asm__ volatile (
@@ -207,9 +209,9 @@ static inline void enable_wp_cr0() {
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 }
 
-//
-// TLB flush
-//
+/*
+ * TLB flush
+ */
 static inline void cpu_flush_tlb() {
     uintptr_t cr3;
     __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));

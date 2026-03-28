@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-// IOAPIC REGS
+/* IOAPIC REGS */
 #define IOAPIC_REG_ID     0x00
 #define IOAPIC_REG_VER    0x01
 #define IOAPIC_REG_ARB    0x02

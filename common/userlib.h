@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Genaeral helper for Syscalls
+/* 
+ * General helper for Syscalls
+ */
 static inline uint64_t syscall_3(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3) {
     uint64_t ret;
     __asm__ volatile (
@@ -16,9 +18,9 @@ static inline uint64_t syscall_3(uint64_t num, uint64_t a1, uint64_t a2, uint64_
     return ret;
 }
 
-//
-// USER INTERFACE
-//
+/*
+ * USER INTERFACE
+ */
 static inline void u_print(const char* s) {
     syscall_3(1, (uintptr_t)s, 0, 0);
 }

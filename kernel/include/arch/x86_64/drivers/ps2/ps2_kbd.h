@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Special keys (not included in ASCII)
+/* Special keys (not included in ASCII) */
 #define KBD_KEY_UP        0x80
 #define KBD_KEY_DOWN      0x81
 #define KBD_KEY_LEFT      0x82
@@ -15,7 +15,7 @@
 #define KBD_KEY_LCTRL     0x87
 #define KBD_KEY_LALT      0x88
 
-// Scancode set - low keys and numbers
+/* Scancode set - low keys and numbers */
 static const uint8_t scancode_set2_lower[] = {
     0,   0x89, 0,   0x8A, 0x8B, 0x8C, 0x8D, 0x96, // 00-07 (F)
     0,   0x97, 0x98, 0x99, 0x9A, '\t', '`', 0,    // 08-0F
@@ -35,7 +35,7 @@ static const uint8_t scancode_set2_lower[] = {
     0x9B, '+', '3', '-', '*', '9', 0,   0         // 78-7F
 };
 
-// Scancode set - upper and special keys
+/* Scancode set - upper and special keys */
 static const uint8_t scancode_set2_upper[] = {
     0,   0,   0,   0,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   '\t', '~', 0,

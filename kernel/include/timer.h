@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-// Gloabl uptime 
+/* Gloabl uptime */
 extern volatile uint64_t system_uptime_ms;
 
 void msleep(uint64_t ms);

@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 
-// Default Physical Address of the Local APIC
+/* Default Physical Address of the Local APIC */
 #define LAPIC_DEFAULT_BASE 0xFEE00000
 
-// LAPIC Register Offsets
+/* LAPIC Register Offsets */
 #define LAPIC_ID            0x0020   // Local APIC ID
 #define LAPIC_VER           0x0030   // Local APIC Version
 #define LAPIC_TPR           0x0080   // Task Priority Register
@@ -34,11 +34,10 @@
 #define LAPIC_TDCR          0x03E0   // Timer Divide Configuration Register 
 #define LAPIC_SVR_ENABLE    0x100    // Unit Enable Bit
 
-//
-// ICR
-//
-
-// Delivery Mode
+/*
+ * ICR
+ */
+/* Delivery Mode */
 #define ICR_FIXED              0x000
 #define ICR_LOWEST_PRIORITY    0x100
 #define ICR_SMI                0x200
@@ -46,29 +45,31 @@
 #define ICR_INIT               0x500
 #define ICR_STARTUP            0x600
 
-// Destination Mode & Status
+/* Destination Mode & Status */
 #define ICR_PHYSICAL           0x0000
 #define ICR_LOGICAL            0x0800
 #define ICR_IDLE               0x0000
 #define ICR_SEND_PENDING       0x1000
 
-// Level & Trigger
+/* Level & Trigger */
 #define ICR_DEASSERT           0x0000
 #define ICR_ASSERT             0x4000
 #define ICR_EDGE               0x0000
 #define ICR_LEVEL              0x8000
 
-// Destination Shorthand
+/* Destination Shorthand */
 #define ICR_SHORTHAND_NONE     0x00000
 #define ICR_SHORTHAND_SELF     0x40000
 #define ICR_SHORTHAND_ALL      0x80000
 #define ICR_SHORTHAND_OTHERS   0xC0000
 
-// Channels
+/* Channels */
 #define IPI_VECTOR_TEST        0xFD
 #define IPI_VECTOR_HALT        0xFE  
 
-// Driver Functions
+/*
+ * DRIVER FUNCTIONS
+ */
 void lapic_init(uintptr_t virt_addr);
 void lapic_init_ap();
 void lapic_write(uint32_t reg, uint32_t data);
@@ -79,17 +80,17 @@ void lapic_wait_for_delivery();
 void lapic_send_ipi(uint8_t target_lapic_id, uint8_t vector);
 void lapic_broadcast_ipi(uint8_t vector);
 
-//
-// Send End-of-Interrupt signal to the LAPIC.
-// Must be called at the end of every interrupt handler.
-//
+/*
+ * Send End-of-Interrupt signal to the LAPIC.
+ * Must be called at the end of every interrupt handler.
+ */
 static inline void lapic_send_eoi() {
     lapic_write(LAPIC_EOI, 0);
 }
 
-//
-// Helper: extract ID of current CPU.
-//
+/*
+ * Helper: extract ID of current CPU.
+ */
 static inline int get_current_cpu_id() {
     extern volatile uint32_t* lapic_base; 
     return (int)(lapic_base[0x20 / 4] >> 24);
