@@ -167,7 +167,7 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
     uint64_t u_stack_size = 4 * PAGE_SIZE;
     if (vma_map(t, u_stack_virt, u_stack_size, VMA_READ | VMA_WRITE | VMA_USER | VMA_STACK) != 0) return NULL;
     
-    t->heap_curr  = t->heap_start;
+    t->heap_curr = t->heap_start;
 
     // 3. Setup Kernel Stack Frame
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;

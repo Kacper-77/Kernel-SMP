@@ -8,7 +8,7 @@ static void* tar_base = NULL;
 static size_t tar_limit = 0;
 
 void tar_init(void* address, size_t size) {
-    tar_base = address;
+    tar_base  = address;
     tar_limit = size;
 }
 

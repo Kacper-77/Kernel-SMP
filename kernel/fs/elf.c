@@ -1,4 +1,5 @@
 #include <elf.h>
+#include <elf_info.h>
 #include <vmm.h>
 #include <pmm.h>
 #include <vma.h>

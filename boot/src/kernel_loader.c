@@ -6,6 +6,7 @@
 
 #include <boot.h>
 #include <boot_info.h>
+#include <elf_info.h>
 #include <kernel_loader.h>
 
 #include <stddef.h>
@@ -24,34 +25,6 @@ void SetMem(void *dst, size_t size, unsigned char value) {
 #define ET_DYN    3
 
 typedef unsigned long long UINT64;
-
-typedef struct {
-    UINT8  e_ident[EI_NIDENT];
-    UINT16 e_type;
-    UINT16 e_machine;
-    UINT32 e_version;
-    UINT64 e_entry;
-    UINT64 e_phoff;
-    UINT64 e_shoff;
-    UINT32 e_flags;
-    UINT16 e_ehsize;
-    UINT16 e_phentsize;
-    UINT16 e_phnum;
-    UINT16 e_shentsize;
-    UINT16 e_shnum;
-    UINT16 e_shstrndx;
-} Elf64_Ehdr;
-
-typedef struct {
-    UINT32 p_type;
-    UINT32 p_flags;
-    UINT64 p_offset;
-    UINT64 p_vaddr;
-    UINT64 p_paddr;
-    UINT64 p_filesz;
-    UINT64 p_memsz;
-    UINT64 p_align;
-} Elf64_Phdr;
 
 static EFI_STATUS open_kernel_file(
     EFI_HANDLE ImageHandle,
