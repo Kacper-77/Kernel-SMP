@@ -115,24 +115,33 @@ uint64_t sys_read_kbd_handler(interrupt_frame_t* frame) {
 
 uint64_t sys_malloc_handler(interrupt_frame_t* frame) {
     size_t size = frame->rdi;
+    if (size == 0) return 0;
+    
     task_t* current = sched_get_current();
 
-    size_t aligned_size = (size + 0xFFF) & ~0xFFFULL;
+    size_t aligned_size = (size + 0x0F) & ~0X0FULL;
 
-    // Map new memory using VMA
-    int res = vma_map(current, current->heap_curr, aligned_size, 
-                      VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP);
-    
-    if (res != 0) {
-        return 0;
+    if (current->heap_curr + aligned_size <= current->heap_end) {
+        uintptr_t allocated_addr = current->heap_curr;
+        current->heap_curr += aligned_size;
+
+        return allocated_addr;
     }
 
-    uintptr_t allocated_addr = current->heap_curr;
+    size_t needed = (current->heap_curr + size) - current->heap_end;
+    size_t aligned_needed = (needed + 0xFFF) & ~0xFFFULL;
     
-    // Advance the heap cursor
+    int res = vma_map(current, current->heap_end, aligned_needed, 
+                      VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP);
+    
+    if (res != 0) return 0;
+
+    current->heap_end += aligned_needed;
+    
+    uintptr_t addr = current->heap_curr;
     current->heap_curr += aligned_size;
     
-    return (uint64_t)allocated_addr;
+    return (uint64_t)addr;
 }
 
 uint64_t sys_free_handler(interrupt_frame_t* frame) {

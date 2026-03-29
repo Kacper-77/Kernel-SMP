@@ -79,6 +79,10 @@ uintptr_t elf_load(task_t* t, void* elf_data) {
     // Initialize heap pointers right after the last ELF segment
     t->heap_start = (max_vaddr + PAGE_SIZE) & ~(PAGE_SIZE - 1);
     t->heap_curr  = t->heap_start;
+    t->heap_end   = t->heap_start + 4 * PAGE_SIZE;
+
+    vma_map(t, t->heap_start, 4 * PAGE_SIZE,
+            VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP);
 
     return header->e_entry;
 }

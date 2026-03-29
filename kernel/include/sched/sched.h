@@ -40,7 +40,8 @@ typedef struct task {
     uint64_t   vma_count; 
     
     uintptr_t heap_start;
-    uintptr_t heap_curr;          
+    uintptr_t heap_curr;
+    uintptr_t heap_end;          
 
     struct task* next;        // Global list for Reaper
     struct task* prev;  

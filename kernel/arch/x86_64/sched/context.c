@@ -112,7 +112,7 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
 
     // 1. Map User Code via VMA (Allocates physical memory and registers it)
     uintptr_t code_virt = 0x400000;
-    uint64_t code_size = 4 * PAGE_SIZE;
+    uint64_t code_size  = 4 * PAGE_SIZE;
     if (vma_map(t, code_virt, code_size, VMA_READ | VMA_EXEC | VMA_USER) != 0) return NULL;
 
     // Copy the code from entry_point to the newly allocated physical pages
@@ -121,12 +121,15 @@ task_t* arch_task_create_user(void (*entry_point)(void)) {
 
     // 2. Map User Stack and Heap via VMA
     uintptr_t u_stack_virt = 0x00007FFFFFFFF000 - (4 * PAGE_SIZE);
-    uint64_t u_stack_size = 4 * PAGE_SIZE;
+    uint64_t u_stack_size  = 4 * PAGE_SIZE;
     if (vma_map(t, u_stack_virt, u_stack_size, VMA_READ | VMA_WRITE | VMA_USER | VMA_STACK) != 0) return NULL;
 
-    // 3. Initialize Heap Pointer
+    // 3. Initialize Heap Pointers and map the Heap
     t->heap_start = 0x406000;
     t->heap_curr  = t->heap_start;
+    t->heap_end   = t->heap_start + 4 * PAGE_SIZE;
+
+    if (vma_map(t, t->heap_start, 4 * PAGE_SIZE, VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP) != 0) return NULL;
 
     // Setup the interrupt frame for Ring 3 transition (iretq)
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL; 
@@ -164,10 +167,8 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
 
     // 2. Map User Stack and Heap via VMA
     uintptr_t u_stack_virt = 0x00007FFFFFFFF000 - (4 * PAGE_SIZE);
-    uint64_t u_stack_size = 4 * PAGE_SIZE;
+    uint64_t u_stack_size  = 4 * PAGE_SIZE;
     if (vma_map(t, u_stack_virt, u_stack_size, VMA_READ | VMA_WRITE | VMA_USER | VMA_STACK) != 0) return NULL;
-    
-    t->heap_curr = t->heap_start;
 
     // 3. Setup Kernel Stack Frame
     uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;

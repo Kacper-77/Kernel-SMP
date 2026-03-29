@@ -143,7 +143,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
             if (!phys) {
                 spin_unlock(&t->vma_lock);
                 spin_irq_restore(f);
-                return -4;
+                return -1;
             }
 
             // Map the new physical frames into the existing virtual range
@@ -164,7 +164,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
         curr = curr->next;
     }
 
-    // 2. Overlap Check (using the list for now, RB-Tree search is an option later)
+    // 2. Overlap Check
     vma_area_t* check = t->vma_list_head;
     while (check) {
         if (addr < check->vm_end && (addr + size) > check->vm_start) {
@@ -187,7 +187,7 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
     new_vma->vm_start = addr;
     new_vma->vm_end   = addr + size;
     new_vma->vm_flags = flags;
-    new_vma->color    = VMA_RED; // New nodes are always red in RB-Tree
+    new_vma->color    = VMA_RED; // New nodes are always red
 
     // 4. Physical memory allocation for the new region
     uint64_t pages = size / 4096;
@@ -318,23 +318,10 @@ void vma_destroy_all(struct task* t) {
     uint64_t f = spin_irq_save();
     spin_lock(&t->vma_lock);
 
-    page_table_t* pml4 = vmm_get_table(t->cr3);
     vma_area_t* curr = t->vma_list_head;
 
     while (curr) {
         vma_area_t* next = curr->next;
-        uintptr_t start  = curr->vm_start;
-        uintptr_t end    = curr->vm_end;
-        
-        for (uintptr_t vaddr = start; vaddr < end; vaddr += PAGE_SIZE) {
-            uintptr_t phys   = vmm_virtual_to_physical(pml4, vaddr);
-            
-            if (phys) {
-                vmm_unmap(pml4, vaddr);
-                pmm_free_frame((void*)phys);
-            }
-        }
-        
         kfree(curr);
         curr = next;
     }
@@ -342,6 +329,11 @@ void vma_destroy_all(struct task* t) {
     t->vma_list_head = NULL;
     t->vma_tree_root = NULL;
     t->vma_count = 0;
+
+    if (t->cr3 != 0) {
+        vmm_destroy_user_pml4(t->cr3, true);
+        t->cr3 = 0;
+    }
     
     spin_unlock(&t->vma_lock);
     spin_irq_restore(f);
