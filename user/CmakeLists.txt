@@ -3,7 +3,7 @@ project(user C)
 
 set(USER_FLAGS "-target x86_64-unknown-elf -ffreestanding -fno-stack-protector -fno-pic -fno-pie -mno-red-zone -m64 -Wall -Wextra")
 
-add_executable(init.elf init.c)
+add_executable(init.elf init.c ${CMAKE_SOURCE_DIR}/common/std_funcs.c)
 
 set_target_properties(init.elf PROPERTIES COMPILE_FLAGS "${USER_FLAGS}")
 

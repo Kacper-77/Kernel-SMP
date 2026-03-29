@@ -49,35 +49,23 @@ void user_info_test() {
 }
 
 static void user_malloc_test() {
-    char m_start[] = {'T', 'e', 's', 't', 'i', 'n', 'g', ' ', 'M', 'a', 'l', 'l', 'o', 'c', '.', '.', '.', '\n', 0};
-    char m_fail[]  = {'M', 'a', 'l', 'l', 'o', 'c', ' ', 'F', 'A', 'I', 'L', 'E', 'D', '!', '\n', 0};
-    char m_ok[]    = {'M', 'a', 'l', 'l', 'o', 'c', ' ', 'O', 'K', ',', ' ', 'A', 'd', 'r', ':', ' ', 0};
-    char m_succ[]  = {'W', 'r', 'i', 't', 'e', '/', 'R', 'e', 'a', 'd', ':', ' ', 'S', 'U', 'C', 'C', 'E', 'S', 'S', '\n', 0};
-    char nl[]      = {'\n', 0};
+    char m_start[] = "Testing Malloc & Unmap...\n";
+    char m_unmap[] = "Testing Unmap...\n";
+    char m_pf_trigger[] = "Triggering Page Fault (writing to freed memory)...\n";
 
     u_print(m_start);
     
-    uint64_t* ptr = (uint64_t*)u_sys_malloc(8192);
-    
-    if (ptr == 0) {
-        u_print(m_fail);
-        u_exit();
-        return;
-    }
+    uint64_t* ptr = (uint64_t*)u_sys_malloc(4096);
+    ptr[0] = 0xDEADC0DE;
 
-    u_print(m_ok);
-    u_print_hex((uintptr_t)ptr);
-    u_print(nl);
+    u_print(m_unmap);
+    u_sys_free((uintptr_t)ptr);
 
-    ptr[0] = 0xDEADC0DECAFEBABE;
-    ptr[1023] = 0x1337133713371337;
-
-    if (ptr[0] == 0xDEADC0DECAFEBABE) {
-        u_print(m_succ);
-    }
-
+    // u_print(m_pf_trigger);
     u_sleep(100);
-    u_yield();
+
+    // ptr[0] = 0x1337; // <--- PAGE FAULT expected
+
 }
 
 void _start() {

@@ -13,6 +13,13 @@ struct task;
 #define VMA_STACK   (1 << 4) 
 #define VMA_HEAP    (1 << 5)
 
+/* Colors */
+typedef enum {
+    VMA_RED = 0,
+    VMA_BLACK = 1
+} vma_node_color_t;
+
+/* Main structure of Red/Black VMA area */
 typedef struct vma_area {
     uintptr_t vm_start;    // Start (Aligned)
     uintptr_t vm_end;      // End (Exclusive)
@@ -22,7 +29,7 @@ typedef struct vma_area {
     struct vma_area *left;
     struct vma_area *right;
     struct vma_area *parent;
-    int color;  // Red/Black
+    vma_node_color_t color;
 
     struct vma_area *next;
     struct vma_area *prev;
