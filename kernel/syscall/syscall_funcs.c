@@ -146,18 +146,34 @@ uint64_t sys_malloc_handler(interrupt_frame_t* frame) {
 
 uint64_t sys_free_handler(interrupt_frame_t* frame) {
     uintptr_t addr = (uintptr_t)frame->rdi;
-    if (addr == 0) return -1;
+    size_t size = (size_t)frame->rsi;
+
+    if (addr == 0 || size == 0) return 0;
 
     task_t* current = sched_get_current();
+    size_t aligned_size = (size + 0x0F) & ~0x0FULL;
 
-    // vma_unmap will:
-    // - find the area in BST/List
-    // - free all physical frames in PMM
-    // - remove entries from Page Tables
-    // - kfree the descriptor
-    int res = vma_unmap(current, addr);
+    if (addr + aligned_size == current->heap_curr) {
+        current->heap_curr = addr;
+    } else {
+        // For now, shrink only the 'logical' heap if the top is freed.
+        // Middle holes are managed by the userspace allocator.
+        return 0; 
+    }
 
-    return (res == 0) ? 0 : (uint64_t)-1;
+    size_t gap = current->heap_end - current->heap_curr;
+    if (gap >= (4 * PAGE_SIZE)) {
+        // Keep 1 page as a buffer to prevent "thrashing"
+        size_t to_release = (gap - PAGE_SIZE) & ~0xFFFULL;
+
+        uintptr_t unmap_start = current->heap_end - to_release;
+        if (unmap_start < current->heap_curr) 
+            unmap_start = (current->heap_curr + 0xFFF) & ~0xFFFULL;
+
+        if (vma_unmap(current, unmap_start, to_release) == 0)
+            current->heap_end = unmap_start;
+    }
+    return 0;
 }
 
 uint64_t sys_get_tid_handler(interrupt_frame_t* frame) {
