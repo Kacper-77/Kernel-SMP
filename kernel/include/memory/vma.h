@@ -2,6 +2,7 @@
 #define VMA_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 struct task;
 
@@ -37,8 +38,8 @@ typedef struct vma_area {
 
 void vma_init_task(struct task* t);
 vma_area_t* vma_find(struct task* t, uintptr_t addr);
-int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags);
-int vma_unmap(struct task* t, uintptr_t addr);
+int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags);
+int vma_unmap(struct task* t, uintptr_t addr, size_t size);
 void vma_destroy_all(struct task* t);
 
 #endif

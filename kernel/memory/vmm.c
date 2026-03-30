@@ -5,7 +5,6 @@
 #include <spinlock.h>
 #include <std_funcs.h>
 #include <efi_descriptor.h>
-#include <apic.h>
 
 /* Default addr mask and default HHDM OFFSET */
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
@@ -22,11 +21,6 @@ extern uint8_t _kernel_end[];
 extern uint8_t _text_start[], _text_end[];
 extern uint8_t _rodata_start[], _rodata_end[];
 extern uint8_t _data_start[], _data_end[];
-
-static void sync_tlb() {
-    lapic_broadcast_ipi(IPI_VECTOR_TEST);
-    lapic_wait_for_delivery();
-}
 
 /*
  * Configures the Page Attribute Table (PAT) MSR to define 
@@ -140,7 +134,7 @@ static void _vmm_unmap_unlocked(page_table_t* pml4, uintptr_t virt) {
     vmm_invlpg((void*)virt);
 }
 
-void _vmm_unmap_range_unlocked(page_table_t* pml4, uintptr_t virt, uint64_t size) {
+void _vmm_unmap_range_unlocked(page_table_t* pml4, uintptr_t virt, size_t size) {
     uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
     for (uint64_t i = 0; i < num_pages; i++) {
         _vmm_unmap_unlocked(pml4, virt + (i * PAGE_SIZE));
@@ -183,7 +177,7 @@ static bool _vmm_map_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys
     return true;
 }
 
-static bool _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
+static bool _vmm_map_range_unlocked(page_table_t* pml4, uintptr_t virt, uintptr_t phys, size_t size, uint64_t flags) {
     uint64_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
     for (uint64_t i = 0; i < num_pages; i++) {
@@ -222,7 +216,7 @@ void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags)
  * Maps a contiguous range of virtual pages to a contiguous range of physical frames.
  * Automatically handles TLB invalidation for the entire range.
  */
-void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags) {
+void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, size_t size, uint64_t flags) {
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
     
@@ -277,7 +271,7 @@ void vmm_map_huge(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t f
  * Uses Write-Combining (via PAT4) for performance, while 
  * ensuring No-Execute (NX) and Writable permissions.
  */
-void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size) {
+void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, size_t size) {
     uintptr_t phys_aligned = PAGE_ALIGN_DOWN(phys);
     uintptr_t offset = phys - phys_aligned;
     uint64_t full_size = PAGE_ALIGN_UP(size + offset);
@@ -320,7 +314,7 @@ done:
     spin_irq_restore(f);
 }
 
-void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size) {
+void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, size_t size) {
     uint64_t f = spin_irq_save();
     spin_lock(&vmm_lock_);
 

@@ -2,6 +2,7 @@
 #define VMM_H
 
 #include <boot_info.h>
+#include <apic.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -51,10 +52,10 @@ void vmm_destroy_user_pml4(uintptr_t cr3, bool free_frames);
 uintptr_t phys_to_virt(uintptr_t phys);
 uintptr_t vmm_virtual_to_physical(page_table_t* pml4, uintptr_t virt);
 void vmm_map(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t flags);
-void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size);
-void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, uint64_t size, uint64_t flags);
+void* vmm_map_device(page_table_t* pml4, uintptr_t virt, uintptr_t phys, size_t size);
+void vmm_map_range(page_table_t* pml4, uintptr_t virt, uintptr_t phys, size_t size, uint64_t flags);
 void vmm_unmap(page_table_t* pml4, uintptr_t virt);
-void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, uint64_t size);
+void vmm_unmap_range(page_table_t* pml4, uintptr_t virt, size_t size);
 
 page_table_t* vmm_get_pml4();
 uintptr_t vmm_get_pml4_phys();
@@ -74,6 +75,11 @@ static inline page_table_t* vmm_get_table(uintptr_t phys) {
         return (page_table_t*)phys;
     }
     return (page_table_t*)phys_to_virt(phys);
+}
+
+static inline void sync_tlb() {
+    lapic_broadcast_ipi(IPI_VECTOR_TEST);
+    lapic_wait_for_delivery();
 }
 
 #endif

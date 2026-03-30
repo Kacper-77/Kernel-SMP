@@ -121,7 +121,7 @@ vma_area_t* vma_find(struct task* t, uintptr_t addr) {
  * 6. RB-Tree Integration: Inserts the new VMA into the balanced Red-Black Tree 
  * and performs a fixup to maintain O(log n) search complexity.
  */
-int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
+int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
     if (size == 0) return -1;
     
     // Page align size and address
@@ -238,74 +238,89 @@ int vma_map(struct task* t, uintptr_t addr, uint64_t size, uint32_t flags) {
 }
 
 /*
- * Unmaps an area, releases physical frames, and destroys the VMA descriptor.
+ * Unmaps a specific range within a VMA, releases physical frames, 
+ * and either trims the VMA or destroys its descriptor if fully unmapped.
+ * Handles SMP synchronization and TLB invalidation.
  */
-int vma_unmap(struct task* t, uintptr_t addr) {
+int vma_unmap(struct task* t, uintptr_t addr, size_t size) {
+    if (size == 0) return 0;
+
     uint64_t f = spin_irq_save();
     spin_lock(&t->vma_lock);
 
-    // 1. Locate the VMA area containing the address
+    // 1. Locate the VMA area containing the start address
     vma_area_t* vma = vma_find(t, addr);
-    
-    // Safety check: ensure VMA exists and 'addr' is the exact start of the region
-    if (!vma || vma->vm_start != addr) {
+    if (!vma) {
         spin_unlock(&t->vma_lock);
         spin_irq_restore(f);
         return -1;
     }
 
+    uintptr_t unmap_end = addr + size;
     page_table_t* pml4 = vmm_get_table(t->cr3);
-    uintptr_t start = vma->vm_start;
-    uintptr_t end   = vma->vm_end;
 
-    // 2. Iterate through the range and release resources page-by-page
-    for (uintptr_t vaddr = start; vaddr < end; vaddr += PAGE_SIZE) {
+    // 2. Iterate through the requested range and release resources page-by-page
+    // We only unmap the 'size' requested, not necessarily the whole VMA
+    for (uintptr_t vaddr = addr; vaddr < unmap_end; vaddr += PAGE_SIZE) {
         uintptr_t phys = vmm_virtual_to_physical(pml4, vaddr);
         if (phys) {
             // Remove entry from Page Tables (VMM)
             vmm_unmap(pml4, vaddr);
-            // Return the physical frame to the PMM bitmap/stack
+            // Return the physical frame to the PMM allocator
             pmm_free_frame((void*)phys);
         }
     }
 
-    // 3. Remove from the doubly-linked list
-    if (vma->prev) vma->prev->next = vma->next;
-    if (vma->next) vma->next->prev = vma->prev;
-    if (t->vma_list_head == vma) {
-        t->vma_list_head = vma->next;
+    // 3. CASE A: Partial Unmap (Trimming the tail of the VMA)
+    // Common for heap shrinkage: unmapping from some point to the very end
+    if (addr > vma->vm_start && unmap_end >= vma->vm_end) {
+        vma->vm_end = addr; // Just move the boundary
+        goto finalize;
     }
 
-    // 4. Remove from the Tree (Simplified removal logic)
-    vma_area_t* replacement = NULL;
-    if (vma->left) {
-        replacement = vma->left;
-        if (vma->right) {
-            vma_area_t* rightmost = vma->left;
-            while (rightmost->right) rightmost = rightmost->right;
-            rightmost->right = vma->right;
-            vma->right->parent = rightmost;
+    // 4. CASE B: Full Unmap (Removing the entire VMA descriptor)
+    if (addr <= vma->vm_start && unmap_end >= vma->vm_end) {
+        // Remove from the doubly-linked list
+        if (vma->prev) vma->prev->next = vma->next;
+        if (vma->next) vma->next->prev = vma->prev;
+        if (t->vma_list_head == vma) {
+            t->vma_list_head = vma->next;
         }
-    } else {
-        replacement = vma->right;
-    }
 
-    if (!vma->parent) {
-        t->vma_tree_root = replacement;
-    } else {
-        if (vma->parent->left == vma) vma->parent->left = replacement;
-        else vma->parent->right = replacement;
-    }
-    
-    if (replacement) replacement->parent = vma->parent;
+        // Remove from the Binary Search Tree
+        vma_area_t* replacement = NULL;
+        if (vma->left) {
+            replacement = vma->left;
+            if (vma->right) {
+                vma_area_t* rightmost = vma->left;
+                while (rightmost->right) rightmost = rightmost->right;
+                rightmost->right = vma->right;
+                vma->right->parent = rightmost;
+            }
+        } else {
+            replacement = vma->right;
+        }
 
-    t->vma_count--;
-    
-    // 5. Free the VMA descriptor from the Kernel Heap
-    kfree(vma);
+        if (!vma->parent) {
+            t->vma_tree_root = replacement;
+        } else {
+            if (vma->parent->left == vma) vma->parent->left = replacement;
+            else vma->parent->right = replacement;
+        }
+        
+        if (replacement) replacement->parent = vma->parent;
 
+        t->vma_count--;
+        
+        // Free the VMA descriptor from the Kernel Heap
+        kfree(vma);
+    } 
+finalize:
     spin_unlock(&t->vma_lock);
     spin_irq_restore(f);
+
+    // 5. Invalidate TLB to ensure no CPU uses stale mappings
+    sync_tlb(); 
 
     return 0;
 }
