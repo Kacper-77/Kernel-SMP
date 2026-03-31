@@ -428,9 +428,7 @@ void task_exit() {
     uint64_t f = spin_irq_save();
     spin_lock(&dead_lock_);
 
-    kprint("\n[SCHED] Task ");
-    kprint_hex(current->tid);
-    kprint(" is now a ZOMBIE.\n");
+    kprintf("[SCHED] Task %d is now a ZOMBIE.\n", (int)current->tid);
 
     // 3. Add to global "cleanup later" list 
     current->state = TASK_ZOMBIE;
@@ -487,9 +485,7 @@ void sched_reap() {
         spin_unlock(&sched_lock_);
         spin_irq_restore(f);
 
-        kprint("[REAPER] Cleaning up TID ");
-        kprint_hex(to_clean->tid);
-        kprint("\n");
+        kprintf("[REAPER] Cleaning up TID %d\n", (int)to_clean->tid);
 
         // Only proper user tasks (TID >= 10) have full memory maps to destroy
         if (to_clean->tid >= 10) vma_destroy_all(to_clean);

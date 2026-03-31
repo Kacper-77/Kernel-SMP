@@ -1,5 +1,5 @@
 #include <ps2_kbd.h>
-#include <io.h>
+#include <ioports.h>
 #include <i8042.h>
 #include <serial.h>
 #include <spinlock.h>

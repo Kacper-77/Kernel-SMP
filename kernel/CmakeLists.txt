@@ -44,7 +44,9 @@ file(GLOB KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/arch/x86_64/*.asm")
 
 # Add executable file
-add_executable(kernel.elf ${KERNEL_SOURCES} ${CMAKE_SOURCE_DIR}/common/std_funcs.c)
+add_executable(kernel.elf ${KERNEL_SOURCES} ${CMAKE_SOURCE_DIR}/common/std_funcs.c 
+               ${CMAKE_SOURCE_DIR}/common/io.c
+               ${CMAKE_SOURCE_DIR}/common/userlib.c)
 
 # Exit settings
 set_target_properties(kernel.elf PROPERTIES

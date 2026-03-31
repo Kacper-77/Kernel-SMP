@@ -13,9 +13,7 @@ uint64_t syscall_handler(interrupt_frame_t* frame) {
     uintptr_t sys_num = frame->rax;
     
     if (sys_table[sys_num] == NULL) {
-        kprint("[SYSCALL] Unknown or unimplemented: ");
-        kprint_hex(sys_num);
-        kprint("\n");
+        kprintf("[SYSCALL] Unknown or unimplemented: %p\n", (uint64_t)sys_num);
         frame->rax = -1;
         return (uintptr_t)frame;
     }

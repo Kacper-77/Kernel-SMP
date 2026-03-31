@@ -1,5 +1,5 @@
 #include <pit.h>
-#include <io.h>
+#include <ioports.h>
 
 /*
  * PIT Mode 0: Interrupt on Terminal Count.

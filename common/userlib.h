@@ -3,11 +3,12 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <io.h>
 
 /* 
  * General helper for Syscalls
  */
-static inline uint64_t syscall_3(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3) {
+static uint64_t syscall_3(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3) {
     uint64_t ret;
     __asm__ volatile (
         "syscall"
@@ -17,6 +18,9 @@ static inline uint64_t syscall_3(uint64_t num, uint64_t a1, uint64_t a2, uint64_
     );
     return ret;
 }
+
+/* Main printing function for user */
+void u_printf(const char* fmt, ...);
 
 /*
  * USER INTERFACE

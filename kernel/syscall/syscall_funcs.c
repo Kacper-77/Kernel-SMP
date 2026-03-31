@@ -33,23 +33,19 @@ static bool is_user_range(const void* addr, size_t size) {
 static uint64_t sys_kprint(const char* str) {
     if (!str) return -1;
 
-    // If pointer is not in lower half
     if ((uintptr_t)str >= KERNEL_SPACE_START) {
-        kprint("\n!!!! Pointer is in Higher Half !!!!\n"); 
+        kprintf("\n[SECURITY] Blocked KPRINT: Pointer %p is in Higher Half!\n", str); 
         return -1;
     }
 
-    // Calculate length
     size_t len = 0;
     while (str[len] != '\0') {
         len++;
-        // Additional - String cannot be infinite
         if (len > 4096) return -2; 
     }
 
-    // Verify everything for last time
     if (!is_user_range(str, len + 1)) {
-        kprint("\n[SECURITY] Blocked KPRINT: string crosses kernel boundary!\n");
+        kprintf("\n[SECURITY] Blocked KPRINT: String at %p crosses kernel boundary!\n", str);
         return -1;
     }
 
@@ -58,7 +54,7 @@ static uint64_t sys_kprint(const char* str) {
 }
 
 static uint64_t sys_kprint_hex(uint64_t value) {
-    kprint_hex(value);
+    kprintf("%p\n", value);
     return 0;
 }
 

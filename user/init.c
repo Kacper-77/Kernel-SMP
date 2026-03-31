@@ -1,78 +1,65 @@
 #include <userlib.h>
 
 static void user_test_task_2() {
-    volatile uint64_t counter = 0;
+    volatile uint64_t counter = 1;
     while(counter < 5) {
-        u_print("TASK 2\n");
+        u_printf("TASK 2 | Iteration: %d\n", (int)counter);
         u_sleep(10);
         counter++;
     }
-    u_print("TASK 2 DONE\n");
+    u_printf("TASK 2 DONE\n");
     u_yield();
 }
 
-
 static void user_test_task_echo() {
-    u_print("\n### SHELL ###\n");
+    u_printf("\n### SHELL ###\n");
 
     while(1) {
         char c = u_read_kbd();
         if (c != 0) {
-            char buf[2] = {c, 0};
-            u_print(buf);
+            u_printf("%c", c);
         }
         u_sleep(50);
     }
 }
 
 void user_info_test() {
-    u_sleep(50);
-    u_print("Current TID: ");
-    uint64_t tid = u_sys_get_tid();
-    u_print_hex(tid);
-    u_print("\n");
-
-    u_print("Available CPUs: ");
-    uint64_t cpus = u_sys_cpu_count(); 
-    u_print_hex(cpus);
-    u_print("\n");
+    u_sleep(100);
+    u_printf("Current TID: %d\n", (int)u_sys_get_tid());
+    u_printf("Available CPUs: %d\n", (int)u_sys_cpu_count());
 
     u_sleep(50);
     u_yield();
 }
 
 static void user_malloc_test() {
-    u_print("### STARTING MEMORY STRESS TEST ###\n");
+    u_printf("### STARTING MEMORY STRESS TEST ###\n");
 
     size_t big_size = 10 * 4096;
     uint64_t* ptr = (uint64_t*)u_sys_malloc(big_size);
     
     if (!ptr) {
-        u_print("Malloc failed!\n");
+        u_printf("Malloc failed!\n");
         return;
     }
+
+    u_printf("Allocated 10 pages at %p\n", ptr);
 
     for(int i = 0; i < 10; i++) {
         ptr[i * 512] = 0xCAFEBABE00000000 | i;
     }
-    u_print("Memory written and verified.\n");
+    u_printf("Memory written and verified at %p.\n", ptr);
 
-    u_print("Freeing 10 pages...\n");
+    u_printf("Freeing %d bytes at %p...\n", (int)big_size, ptr);
     u_sys_free((uintptr_t)ptr, big_size);
 
-    u_sleep(50);
+    //ptr[1000] = 1;  // <--- PAGE FAULT expected
 
-    // u_print("Triggering Page Fault...\n");
-    
-    // uint64_t* dead_ptr = (uint64_t*)((uintptr_t)ptr + (8 * 4096));
-    // *dead_ptr = 0x1337;  // <-- PAGE FAULT expected
-    
-    // u_print("ERROR: If you see this, Unmap/TLB Flush FAILED!\n");
+    u_sleep(50);
 }
 
 void _start() {
-    char msg[] = {'E', 'L', 'F', ' ', 'W', 'O', 'R', 'K', 'S', '!', '\n', 0};
-    u_print(msg);
+    u_printf("ELF WORKS! Entering Ring 3 environment...\n");
     u_sleep(100);
 
     user_test_task_2();
@@ -80,7 +67,6 @@ void _start() {
     user_malloc_test();
 
     user_info_test();
-    
-    user_test_task_echo();
 
+    user_test_task_echo();
 }

@@ -57,9 +57,8 @@ uintptr_t elf_load(task_t* t, void* elf_data) {
             // This also handles PMM allocation and VMM mapping internally.
             int res = vma_map(t, phdr[i].p_vaddr, phdr[i].p_memsz, vma_flags);
             if (res != 0) {
-                kprint("[ELF] Failed to map segment at ");
-                kprint_hex(phdr[i].p_vaddr);
-                kprint("\n");
+                kprintf("[ELF] Failed to map segment at %p (Size: %x, Flags: %x)\n", 
+                        phdr[i].p_vaddr, phdr[i].p_memsz, phdr[i].p_flags);
                 return 0;
             }
 

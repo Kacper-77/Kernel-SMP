@@ -20,17 +20,20 @@ void exception_handler(interrupt_frame_t* frame) {
     uint64_t cr2;
     __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
 
-    kprint("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-    kprint("!!!          CPU EXCEPTION         !!!\n");
-    kprint("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-    kprint("Vector: ");        kprint_hex(frame->vector_number);
-    kprint(" | Error Code: "); kprint_hex(frame->error_code);
-    kprint("\nRIP:    ");      kprint_hex(frame->rip);
-    kprint("\nCR2 (Fault Address): "); kprint_hex(cr2);
-    kprint("\nRAX:    ");      kprint_hex(frame->rax);
-    kprint(" | RBX: ");        kprint_hex(frame->rbx);
-    kprint("\nStack at: ");    kprint_hex(frame->rsp);
-    kprint("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    kprintf("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    kprintf("!!!          CPU EXCEPTION         !!!\n");
+    kprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    kprintf("Vector: %p | Error Code: %p\n", 
+            frame->vector_number, frame->error_code);
+            
+    kprintf("RIP:    %p\n", frame->rip);
+    kprintf("CR2 (Fault Address): %p\n", cr2);
+    
+    kprintf("RAX:    %p | RBX: %p\n", 
+            frame->rax, frame->rbx);
+
+    kprintf("Stack at: %p\n", frame->rsp);
+    kprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     
     panic("Unhandled CPU Exception");  // !!! WILL BE CHANGED !!!
 }

@@ -1,5 +1,5 @@
 #include <i8042.h>
-#include <io.h>
+#include <ioports.h>
 #include <spinlock.h>
 #include <serial.h>
 

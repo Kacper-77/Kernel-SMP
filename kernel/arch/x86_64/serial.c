@@ -1,8 +1,12 @@
 #include <serial.h>
 #include <spinlock.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <ioports.h>
 #include <io.h>
 
-#define COM1 0x3f8
+#define COM1 0x3F8
 #define BUFFER_SIZE (128 * 1024)  // 128 KB
 
 spinlock_t kprint_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };
@@ -97,4 +101,17 @@ void log_flush() {
         outb(COM1, log_buffer[log_tail]);
         log_tail = (log_tail + 1) % BUFFER_SIZE;
     }
+}
+
+void kprintf(const char* fmt, ...) {
+    char tmp_buf[512];
+    va_list args;
+    
+    va_start(args, fmt);
+    vsnprintf(tmp_buf, sizeof(tmp_buf), fmt, args);
+    va_end(args);
+
+    kprint(tmp_buf);
+    
+    // log_flush(); 
 }

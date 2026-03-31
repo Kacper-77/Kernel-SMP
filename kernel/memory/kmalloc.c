@@ -18,16 +18,14 @@ void kmalloc_dump() {
     uint64_t f = spin_irq_save();
     spin_lock(&heap_lock_); 
 
-    kprint("\n--- DUMP START ---\n");
+    kprintf("\n----- DUMP START -----\n");
     m_header_t* curr = heap_start;
     while (curr) {
-        kprint("Block: ");   kprint_hex((uintptr_t)curr);
-        kprint(" | Size: "); kprint_hex(curr->size);
-        kprint(" | Free: "); kprint(curr->is_free ? "YES" : "NO");
-        kprint("\n");
+        kprintf("Block: %p | Size: %x | Free: %s\n", 
+        (uintptr_t)curr, curr->size, curr->is_free ? "YES" : "NO");
         curr = curr->next;
     }
-    kprint("--- DUMP END ---\n");
+    kprintf("----- DUMP END -----\n");
 
     spin_unlock(&heap_lock_);
     spin_irq_restore(f);

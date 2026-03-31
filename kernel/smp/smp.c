@@ -23,29 +23,9 @@ extern uint8_t trampoline_end[];
 static uint64_t cpu_count = 1;
 cpu_context_t* cpu_table[32] = { 0 };
 
-static void ap_test_task() {
-    int x = 0;
-    while(x < 10) {
-        kprint("?");
-        msleep(10);
-        x++;
-    }
-    task_exit();
-}
-
-static void ap_test_task2() {
-    int x = 0;
-    while(x < 10) {
-        kprint("!");
-        msleep(10);
-        x++;
-    }
-    task_exit();
-}
-
 static void user_test_task_ap() {
     char msg[] = "\nRING 3 AP AP AP AP AP\n";
-    u_print(msg);
+    u_printf(msg);
     
     u_sleep(10);
     u_exit();
@@ -90,8 +70,6 @@ void kernel_main_ap(cpu_context_t* ctx) {
     }
     kfree((void*)ap_message);
 
-    // arch_task_create(ap_test_task);
-    // arch_task_create(ap_test_task2);
     arch_task_create_user(user_test_task_ap);
 
     __asm__ volatile("sti");
