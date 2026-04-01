@@ -109,7 +109,7 @@ qemu-system-x86_64 -m 256M `
 
 ## Troubleshooting
 
-- **File not found** → verify `edk2` and `vars` in root directory  
-- **ESP locked (Windows)** → close IDE / Explorer using folder  
-- **No logs** → check terminal output (kprint)  
-- **Performance** → reduce `-smp 32` to `4–8`  
+- **File not found** -> verify `edk2` and `vars` in root directory  
+- **ESP locked (Windows)** -> close IDE / Explorer using folder  
+- **No logs** -> check terminal output (kprint)  
+- **Performance** -> reduce `-smp 32` to `4–8`  
