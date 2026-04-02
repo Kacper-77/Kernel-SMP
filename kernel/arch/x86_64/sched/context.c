@@ -35,6 +35,7 @@ static task_t* task_alloc_base() {
     t->state = TASK_READY;
     t->tid = __atomic_fetch_add(&next_tid, 1, __ATOMIC_RELAXED);
     t->priority = PRIO_NORMAL;
+    t->base_priority = PRIO_NORMAL;
 
     return t;
 }
@@ -73,6 +74,7 @@ task_t* arch_task_create(void (*entry_point)(void)) {
     if (!t) return NULL;
 
     t->priority = PRIO_HIGH;
+    t->base_priority = PRIO_HIGH;
     t->is_user  = false;
     t->cr3      = read_cr3();
 

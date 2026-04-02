@@ -44,7 +44,9 @@ static void idle_task() {
 void enqueue_task(cpu_context_t* cpu, task_t* task) {
     spin_lock(&cpu->rq_lock);
 
-    uint8_t p = task->priority;
+    task->priority = task->base_priority;
+    task_prio_t p = task->priority;
+
     if (p >= PRIORITY_LEVELS) p = PRIO_NORMAL;
     cpu->current_quanta[p] = 0; 
 
@@ -312,6 +314,25 @@ static task_t* steal_task_from_cpu(cpu_context_t* other) {
     return stolen;
 }
 
+static void prio_boost(cpu_context_t* cpu) {
+    for (int p = PRIO_HIGH; p < PRIO_LOW; p++) {
+        if (cpu->rq_head[p + 1] == NULL) continue;
+
+        if (cpu->rq_tail[p]) {
+            cpu->rq_tail[p]->sched_next = cpu->rq_head[p + 1];
+        } else {
+           cpu->rq_head[p] = cpu->rq_head[p + 1];
+        }
+
+        cpu->rq_tail[p] = cpu->rq_tail[p + 1];
+        cpu->rq_count[p] += cpu->rq_count[p + 1];
+
+        cpu->rq_head[p + 1] = NULL;
+        cpu->rq_tail[p + 1] = NULL;
+        cpu->rq_count[p + 1] = 0;
+    }
+}
+
 /*
  * Initializes the scheduler on the Bootstrap Processor (BSP).
  */
@@ -348,6 +369,12 @@ uint64_t schedule(interrupt_frame_t* frame) {
     uint64_t f = spin_irq_save();
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
+    uint64_t now = get_uptime_ms();
+
+    if (now >= cpu->next_priority_boost) {
+        prio_boost(cpu);
+        cpu->next_priority_boost = now + PRIORITY_BOOST;
+    }
 
     if (current) {
         current->rsp = (uintptr_t)frame;

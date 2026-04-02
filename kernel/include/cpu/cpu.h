@@ -6,12 +6,7 @@
 
 #include <spinlock.h>
 #include <std_funcs.h>
-
-#define PRIORITY_LEVELS 4
-#define PRIO_HIGH   0
-#define PRIO_NORMAL 1
-#define PRIO_LOW    2
-#define PRIO_IDLE   3
+#include <sched_utils.h>
 
 typedef struct tss {
     uint32_t reserved0;
@@ -81,6 +76,7 @@ typedef struct cpu_context {
     struct task* rq_tail[PRIORITY_LEVELS];
     uint32_t rq_count[PRIORITY_LEVELS];
     uint32_t current_quanta[PRIORITY_LEVELS];
+    uint64_t next_priority_boost;
 } cpu_context_t;
 
 extern cpu_context_t* cpu_table[32];

@@ -5,22 +5,10 @@
 #include <cpu.h>
 #include <spinlock.h>
 #include <vma.h>
+#include <sched_utils.h>
 
 #include <stdint.h>
 #include <stdbool.h>
-
-typedef enum {
-    TASK_READY,
-    TASK_RUNNING,
-    TASK_SLEEPING,
-    TASK_ZOMBIE,
-    TASK_FINISHED,
-    TASK_BLOCKED
-} task_state_t;
-
-typedef enum {
-    REASON_KEYBOARD
-} task_reason_t;
 
 typedef struct task {
     uint64_t  tid;
@@ -46,7 +34,8 @@ typedef struct task {
     struct task* next;        // Global list for Reaper
     struct task* prev;  
     struct task* sched_next;  // Runqueue Per-CPU
-    uint8_t priority;
+    task_prio_t  priority;
+    task_prio_t  base_priority;
 
     uint64_t cpu_id;
     uint64_t sleep_until;
