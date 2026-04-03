@@ -10,9 +10,9 @@ The goal is to build a practical environment for studying OS internals beyond hi
 
 ## Key Features
 
-- Symmetric Multiprocessing (SMP) with INIT-SIPI-SIPI boot sequence  
-- 4-level paging with Virtual Memory Areas (VMA)  
-- Multilevel round-robin scheduler with work-stealing load balancing  
+- Custom SMP implementation with full AP bootstrapping (INIT-SIPI-SIPI), scaling to 32 cores
+- 4-level paging with VMA subsystem (RB-tree, merging, per-process mappings)
+- Custom multilevel scheduler with work-stealing to reduce inter-core contention
 - Syscall interface for Ring 3 ↔ Ring 0 transitions  
 
 ---
