@@ -193,15 +193,15 @@ void kernel_main_high(BootInfo *bi) {
         msleep(1000);
         kprintf("Tick %ds...\n", i);
     }
-    
+
     arch_task_create(task_a);
     arch_task_create(task_b);
 
     kprintf("Timer TEST PASSED! Uptime: %dms\n", get_uptime_ms());
 
     kprintf("###   Higher Half kernel is now idling.   ###\n");
+
     kmalloc_dump();
-    msleep(500);
     
     while(1) {
         log_flush();

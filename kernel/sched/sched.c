@@ -11,7 +11,6 @@
 
 task_t* root_task          = NULL;
 task_t* dead_task_list     = NULL;
-task_t* sleeping_task_list = NULL;
 task_t* blocked_task_list  = NULL;
 
 spinlock_t sched_lock_    = { .ticket = 0, .current = 0, .last_cpu = -1 };
@@ -109,46 +108,40 @@ task_t* dequeue_task(cpu_context_t* cpu) {
 }
 
 /*
- * Iterates through the global list of sleeping tasks and wakes up those 
+ * Iterates through the local list of sleeping tasks and wakes up those 
  * whose sleep duration has expired. To prevent deadlocks (AB-BA), it first 
- * extracts tasks from the sleeping list under 'sched_lock_' and then 
+ * extracts tasks from the sleeping list under local 'sleep_lock' and then 
  * enqueues them into their respective CPU runqueues.
  */
 void sched_update_sleepers() {
+    cpu_context_t* cpu = get_cpu();
     uint64_t now = get_uptime_ms();
-    task_t* tasks_to_wake = NULL;
-    task_t** pp = &sleeping_task_list;
+    
+    task_t* ready_queue = NULL;
 
     uint64_t f = spin_irq_save();
-    spin_lock(&sleep_lock_);
+    spin_lock(&cpu->sleep_lock);
 
-    while (*pp) {
-        task_t* t = *pp;
-        if (now >= t->sleep_until) {
-            *pp = t->sched_next;
-            
-            t->sched_next = tasks_to_wake;
-            tasks_to_wake = t;
-            
-            t->state = TASK_READY;
-        } else {
-            pp = &((*pp)->sched_next);
-        }
+    while (cpu->sleeping_list && now >= cpu->sleeping_list->sleep_until) {
+        task_t* t = cpu->sleeping_list;
+        cpu->sleeping_list = t->sched_next;
+
+        t->sched_next = ready_queue;
+        ready_queue = t;
     }
 
-    spin_unlock(&sleep_lock_);
+    spin_unlock(&cpu->sleep_lock);
+
+    while (ready_queue) {
+        task_t* t = ready_queue;
+        ready_queue = t->sched_next;
+
+        t->state = TASK_READY;
+        t->sched_next = NULL;
+
+        enqueue_task(cpu, t);
+    }
     spin_irq_restore(f);
-
-    // Avoid AB-BA rq_lock
-    while (tasks_to_wake) {
-        task_t* t = tasks_to_wake;
-        tasks_to_wake = t->sched_next;
-
-        cpu_context_t* target_cpu = get_cpu_by_id(t->cpu_id);
-        if (!target_cpu) target_cpu = get_cpu();
-        
-        enqueue_task(target_cpu, t);
-    }
 }
 
 /*
@@ -161,23 +154,23 @@ void sched_make_task_sleep(uint64_t ms) {
     task_t* current = sched_get_current();
     if (!current) return;
 
+    cpu_context_t* cpu = get_cpu();
     current->state = TASK_SLEEPING;
     current->sleep_until = get_uptime_ms() + ms;
 
     uint64_t f = spin_irq_save();
-    spin_lock(&sched_lock_);
+    spin_lock(&cpu->sleep_lock);
 
-    // Find place in sorted list
-    task_t** pp = &sleeping_task_list;
+    task_t** pp = &cpu->sleeping_list;
+
     while (*pp && (*pp)->sleep_until < current->sleep_until) {
         pp = &((*pp)->sched_next);
     }
 
-    // Insert task between
     current->sched_next = *pp;
     *pp = current;
 
-    spin_unlock(&sched_lock_);
+    spin_unlock(&cpu->sleep_lock);
     spin_irq_restore(f);
 }
 
@@ -208,10 +201,11 @@ void sched_block_current(task_reason_t reason) {
  */
 void sched_wakeup(task_reason_t reason) {
     task_t* tasks_to_wake = NULL;
-    task_t** pp = &blocked_task_list;
 
     uint64_t f = spin_irq_save();
     spin_lock(&blocked_lock_);
+
+    task_t** pp = &blocked_task_list;
 
     while (*pp) {
         task_t* t = *pp;
@@ -367,6 +361,7 @@ void sched_init() {
  */
 uint64_t schedule(interrupt_frame_t* frame) {
     uint64_t f = spin_irq_save();
+    
     cpu_context_t* cpu = get_cpu();
     task_t* current = cpu->current_task;
     uint64_t now = get_uptime_ms();

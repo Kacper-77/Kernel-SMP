@@ -24,7 +24,7 @@ static void user_test_task_echo() {
 }
 
 void user_info_test() {
-    u_sleep(100);
+    // u_sleep(100);
     u_printf("Current TID: %d\n", (int)u_sys_get_tid());
     u_printf("Available CPUs: %d\n", (int)u_sys_cpu_count());
 

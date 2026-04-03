@@ -77,6 +77,9 @@ typedef struct cpu_context {
     uint32_t rq_count[PRIORITY_LEVELS];
     uint32_t current_quanta[PRIORITY_LEVELS];
     uint64_t next_priority_boost;
+
+    spinlock_t sleep_lock;
+    struct task* sleeping_list;
 } cpu_context_t;
 
 extern cpu_context_t* cpu_table[32];
@@ -156,6 +159,7 @@ static inline void cpu_init_context(cpu_context_t* ctx) {
         ctx->current_quanta[i] = 0;
     }
     ctx->rq_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
+    ctx->sleep_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
     uint64_t addr = (uintptr_t)ctx;
     
     // MSR_GS_BASE (0xC0000101)
