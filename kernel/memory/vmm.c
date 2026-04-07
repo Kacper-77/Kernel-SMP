@@ -6,7 +6,7 @@
 #include <std_funcs.h>
 #include <efi_descriptor.h>
 
-/* Default addr mask and default HHDM OFFSET */
+/* Default ADDR MASK and default HHDM OFFSET */
 #define VMM_ADDR_MASK 0x000000FFFFFFF000ULL
 #define HHDM_OFFSET 0xFFFF800000000000
 

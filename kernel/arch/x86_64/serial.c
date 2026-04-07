@@ -112,6 +112,4 @@ void kprintf(const char* fmt, ...) {
     va_end(args);
 
     kprint(tmp_buf);
-    
-    // log_flush(); 
 }
