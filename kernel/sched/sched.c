@@ -6,7 +6,7 @@
 #include <pmm.h>
 #include <vmm.h>
 #include <vma.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <std_funcs.h>
 
 task_t* root_task          = NULL;

@@ -1,7 +1,7 @@
 #include <pmm.h>
 #include <vmm.h>
 #include <cpu.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <efi_descriptor.h>
 
 #define HHDM_OFFSET 0xFFFF800000000000

@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <spinlock.h>
+#include <atomic.h>
 #include <std_funcs.h>
 #include <sched_utils.h>
 

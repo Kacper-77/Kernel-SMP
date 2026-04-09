@@ -5,7 +5,7 @@
 #include <timer.h>
 #include <panic.h>
 #include <sched.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <ps2_kbd.h>
 
 static struct idt_ptr idtr;

@@ -1,6 +1,6 @@
 #include <i8042.h>
 #include <ioports.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <serial.h>
 
 static spinlock_t i8042_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };

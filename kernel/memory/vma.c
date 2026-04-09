@@ -3,7 +3,7 @@
 #include <kmalloc.h>
 #include <vmm.h>
 #include <pmm.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <std_funcs.h>
 
 /*

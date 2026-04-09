@@ -1,7 +1,7 @@
 #ifndef SLAB_H
 #define SLAB_H
 
-#include <spinlock.h>
+#include <atomic.h>
 
 #include <stddef.h>
 

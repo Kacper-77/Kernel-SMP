@@ -1,7 +1,7 @@
 #include <kmalloc.h>
 #include <pmm.h>
 #include <vmm.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <std_funcs.h>
 #include <serial.h>
 #include <slab.h>

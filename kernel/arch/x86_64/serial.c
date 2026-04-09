@@ -1,5 +1,5 @@
 #include <serial.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>

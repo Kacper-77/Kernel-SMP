@@ -21,7 +21,8 @@ typedef enum {
 } task_state_t;
 
 typedef enum {
-    REASON_KEYBOARD
+    REASON_KEYBOARD,
+    REASON_MUTEX
 } task_reason_t;
 
 #endif

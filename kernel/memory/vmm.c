@@ -2,7 +2,7 @@
 #include <pmm.h>
 #include <cpu.h>
 #include <panic.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <std_funcs.h>
 #include <efi_descriptor.h>
 

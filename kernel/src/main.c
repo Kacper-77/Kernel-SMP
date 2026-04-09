@@ -12,7 +12,7 @@
 #include <test.h>
 #include <timer.h>
 #include <kmalloc.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <panic.h>
 #include <sched.h>
 #include <userlib.h>

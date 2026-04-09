@@ -2,7 +2,7 @@
 #include <serial.h>
 #include <apic.h>
 #include <cpu.h>
-#include <spinlock.h>
+#include <atomic.h>
 
 /*
  * Broadcasts a Halt IPI to all other CPU cores.

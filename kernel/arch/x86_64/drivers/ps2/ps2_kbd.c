@@ -2,7 +2,7 @@
 #include <ioports.h>
 #include <i8042.h>
 #include <serial.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <sched.h>
 
 static spinlock_t kbd_lock_ = { .ticket = 0, .current = 0, .last_cpu = -1 };

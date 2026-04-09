@@ -3,7 +3,7 @@
 
 #include <idt.h>
 #include <cpu.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <vma.h>
 #include <sched_utils.h>
 

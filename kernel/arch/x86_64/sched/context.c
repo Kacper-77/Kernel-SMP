@@ -3,7 +3,7 @@
 #include <vmm.h>
 #include <idt.h>
 #include <kmalloc.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <std_funcs.h>
 #include <cpu.h>
 #include <elf.h>
