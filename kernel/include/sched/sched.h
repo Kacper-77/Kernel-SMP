@@ -24,7 +24,7 @@ typedef struct task {
     // VMA & Memory Management
     struct vma_area* vma_tree_root; 
     struct vma_area* vma_list_head;
-    spinlock_t vma_lock;
+    mutex_t    vma_mutex;
     uint64_t   vma_count; 
     
     uintptr_t heap_start;

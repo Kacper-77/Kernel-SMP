@@ -3,6 +3,9 @@
 #include <sched.h>
 #include <sched_utils.h>
 
+/*
+ * SPINLOCK
+ */
 void spin_lock(spinlock_t* lock) {
     if (!g_lock_enabled) return;
 
@@ -42,48 +45,77 @@ bool spin_trylock(spinlock_t* lock) {
 
     return false;
 }
+
+/*
+ * MUTEX
+ */
+static int atomic_inc_return(atomic_t *v) {
+    int i = 1;
+    __asm__ volatile(
+        "lock; xaddl %0, %1"
+        : "+r" (i), "+m" (v->counter)
+        : : "memory"
+    );
+    return i + 1;
+}
+
+static int atomic_dec_return(atomic_t *v) {
+    int i = -1;
+    __asm__ volatile(
+        "lock; xaddl %0, %1"  // temp = *v; *v += i; i = temp;
+        : "+r" (i), "+m" (v->counter)
+        : : "memory"
+    );
+    return i + (-1);
+}
+
 void mutex_lock(mutex_t* m) {
-    if (atomic_dec_return(&m->count) == 0) {
-        m->owner = sched_get_current();
-        return;
+    if (!g_lock_enabled) return;
+
+    while (atomic_dec_return(&m->count) < 0) {
+        task_t* current = sched_get_current();
+        uint64_t f = spin_irq_save();
+        spin_lock(&m->wait_lock);
+
+        atomic_inc_return(&m->count); 
+
+        current->state = TASK_BLOCKED;
+        current->wait_reason = REASON_MUTEX;
+        
+        current->sched_next = m->wait_list;
+        m->wait_list = current;
+
+        spin_unlock(&m->wait_lock);
+        spin_irq_restore(f);
+        
+        sched_yield();
     }
-
-    task_t* current = sched_get_current();
-    uint64_t f = spin_irq_save();
-    spin_lock(&m->wait_lock);
-
-    current->state = TASK_BLOCKED;
-    current->wait_reason = REASON_MUTEX;
-    
-    current->sched_next = m->wait_list;
-    m->wait_list = current;
-
-    spin_unlock(&m->wait_lock);
-    
-    sched_yield(); 
-
-    spin_irq_restore(f);
+    m->owner = sched_get_current();
 }
 
 void mutex_unlock(mutex_t* m) {
+    if (!g_lock_enabled) return;
+
     m->owner = NULL;
+    task_t* task_to_wake = NULL;
 
     if (atomic_inc_return(&m->count) <= 0) {
         uint64_t f = spin_irq_save();
         spin_lock(&m->wait_lock);
 
         if (m->wait_list) {
-            task_t* t = m->wait_list;
-            m->wait_list = t->sched_next;
-            
-            t->state = TASK_READY;
-            t->sched_next = NULL;
-            
-            cpu_context_t* target_cpu = get_cpu_by_id(t->cpu_id);
-            enqueue_task(target_cpu ? target_cpu : get_cpu(), t);
+            task_to_wake = m->wait_list;
+            m->wait_list = task_to_wake->sched_next;
+            task_to_wake->sched_next = NULL;
         }
 
         spin_unlock(&m->wait_lock);
         spin_irq_restore(f);
+
+        if (task_to_wake) {
+            task_to_wake->state = TASK_READY;
+            cpu_context_t* target_cpu = get_cpu_by_id(task_to_wake->cpu_id);
+            enqueue_task(target_cpu, task_to_wake);
+        }
     }
 }

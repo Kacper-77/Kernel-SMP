@@ -88,7 +88,12 @@ void vma_init_task(struct task* t) {
     t->vma_tree_root = NULL;
     t->vma_list_head = NULL;
     t->vma_count = 0;
-    t->vma_lock  = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
+    t->vma_mutex = (mutex_t){
+        .count = { .counter = 1 },
+        .wait_lock = { .ticket = 0, .current = 0, .last_cpu = -1 },
+        .wait_list = NULL,
+        .owner = NULL
+    };
 }
 
 /*
@@ -128,8 +133,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
     size = (size + 0xFFF) & ~0xFFFULL;
     if (addr & 0xFFF) return -1;
 
-    uint64_t f = spin_irq_save();
-    spin_lock(&t->vma_lock);
+    mutex_lock(&t->vma_mutex);
 
     // 1. VMA Merging (Expansion Logic)
     // Check if we can just expand an existing VMA (usually the heap)
@@ -141,8 +145,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
             uint64_t pages = size / 4096;
             void* phys = pmm_alloc_frames(pages);
             if (!phys) {
-                spin_unlock(&t->vma_lock);
-                spin_irq_restore(f);
+                mutex_unlock(&t->vma_mutex);
                 return -1;
             }
 
@@ -157,8 +160,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
             // Expand the boundary of the existing VMA
             curr->vm_end += size;
 
-            spin_unlock(&t->vma_lock);
-            spin_irq_restore(f);
+            mutex_unlock(&t->vma_mutex);
             return 0; // Success via expansion, no new VMA descriptor created
         }
         curr = curr->next;
@@ -168,8 +170,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
     vma_area_t* check = t->vma_list_head;
     while (check) {
         if (addr < check->vm_end && (addr + size) > check->vm_start) {
-            spin_unlock(&t->vma_lock);
-            spin_irq_restore(f);
+            mutex_unlock(&t->vma_mutex);
             return -2;
         }
         check = check->next;
@@ -178,8 +179,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
     // 3. Allocate New VMA descriptor
     vma_area_t* new_vma = kmalloc(sizeof(vma_area_t));
     if (!new_vma) {
-        spin_unlock(&t->vma_lock);
-        spin_irq_restore(f);
+        mutex_unlock(&t->vma_mutex);
         return -3;
     }
     memset(new_vma, 0, sizeof(vma_area_t));
@@ -194,8 +194,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
     void* phys = pmm_alloc_frames(pages);
     if (!phys) {
         kfree(new_vma);
-        spin_unlock(&t->vma_lock);
-        spin_irq_restore(f);
+        mutex_unlock(&t->vma_mutex);
         return -4;
     }
 
@@ -232,8 +231,7 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
     vma_insert_fixup(t, new_vma);
 
     t->vma_count++;
-    spin_unlock(&t->vma_lock);
-    spin_irq_restore(f);
+    mutex_unlock(&t->vma_mutex);
     return 0;
 }
 
@@ -245,14 +243,12 @@ int vma_map(struct task* t, uintptr_t addr, size_t size, uint32_t flags) {
 int vma_unmap(struct task* t, uintptr_t addr, size_t size) {
     if (size == 0) return 0;
 
-    uint64_t f = spin_irq_save();
-    spin_lock(&t->vma_lock);
+    mutex_lock(&t->vma_mutex);
 
     // 1. Locate the VMA area containing the start address
     vma_area_t* vma = vma_find(t, addr);
     if (!vma) {
-        spin_unlock(&t->vma_lock);
-        spin_irq_restore(f);
+        mutex_unlock(&t->vma_mutex);
         return -1;
     }
 
@@ -316,11 +312,9 @@ int vma_unmap(struct task* t, uintptr_t addr, size_t size) {
         kfree(vma);
     } 
 finalize:
-    spin_unlock(&t->vma_lock);
-    spin_irq_restore(f);
-
     // 5. Invalidate TLB to ensure no CPU uses stale mappings
-    sync_tlb(); 
+    sync_tlb();
+    mutex_unlock(&t->vma_mutex); 
 
     return 0;
 }
@@ -330,8 +324,7 @@ finalize:
  * Crucial for the Reaper/task_exit to prevent memory leaks.
  */
 void vma_destroy_all(struct task* t) {
-    uint64_t f = spin_irq_save();
-    spin_lock(&t->vma_lock);
+    mutex_lock(&t->vma_mutex);
 
     vma_area_t* curr = t->vma_list_head;
 
@@ -349,7 +342,5 @@ void vma_destroy_all(struct task* t) {
         vmm_destroy_user_pml4(t->cr3, true);
         t->cr3 = 0;
     }
-    
-    spin_unlock(&t->vma_lock);
-    spin_irq_restore(f);
+    mutex_unlock(&t->vma_mutex);
 }

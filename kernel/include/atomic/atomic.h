@@ -18,26 +18,6 @@ typedef struct {
     volatile int counter;
 } atomic_t;
 
-static inline int atomic_inc_return(atomic_t *v) {
-    int i = 1;
-    __asm__ volatile(
-        "lock; xaddl %0, %1"
-        : "+r" (i), "+m" (v->counter)
-        : : "memory"
-    );
-    return i + 1;
-}
-
-static inline int atomic_dec_return(atomic_t *v) {
-    int i = -1;
-    __asm__ volatile(
-        "lock; xaddl %0, %1"  // temp = *v; *v += i; i = temp;
-        : "+r" (i), "+m" (v->counter)
-        : : "memory"
-    );
-    return i + (-1);
-}
-
 typedef struct mutex {
     atomic_t     count;
     spinlock_t   wait_lock;
