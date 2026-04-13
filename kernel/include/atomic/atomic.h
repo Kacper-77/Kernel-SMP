@@ -14,12 +14,8 @@ typedef struct spinlock {
     int last_cpu;
 } __attribute__((aligned(64))) spinlock_t;
 
-typedef struct {
-    volatile int counter;
-} atomic_t;
-
 typedef struct mutex {
-    atomic_t     count;
+    int          count;
     spinlock_t   wait_lock;
     struct task* wait_list;
     struct task* owner;

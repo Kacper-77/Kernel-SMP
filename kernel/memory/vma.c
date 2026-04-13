@@ -89,7 +89,7 @@ void vma_init_task(struct task* t) {
     t->vma_list_head = NULL;
     t->vma_count = 0;
     t->vma_mutex = (mutex_t){
-        .count = { .counter = 1 },
+        .count = 1,
         .wait_lock = { .ticket = 0, .current = 0, .last_cpu = -1 },
         .wait_list = NULL,
         .owner = NULL
