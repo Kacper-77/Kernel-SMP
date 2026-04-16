@@ -283,7 +283,7 @@ int vma_unmap(struct task* t, uintptr_t addr, size_t size) {
             t->vma_list_head = vma->next;
         }
 
-        // Remove from the Binary Search Tree
+        // Remove from the BST
         vma_area_t* replacement = NULL;
         if (vma->left) {
             replacement = vma->left;

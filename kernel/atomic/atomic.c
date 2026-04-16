@@ -67,7 +67,6 @@ void mutex_lock(mutex_t* m) {
             return;
         }
 
-        // enqueue
         current->state = TASK_BLOCKED;
         current->wait_reason = REASON_MUTEX;
 
@@ -92,7 +91,6 @@ void mutex_unlock(mutex_t* m) {
     task_t* task_to_wake = NULL;
 
     if (m->wait_list) {
-        // dequeue
         task_to_wake = m->wait_list;
         m->wait_list = task_to_wake->sched_next;
         task_to_wake->sched_next = NULL;
