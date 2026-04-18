@@ -71,7 +71,7 @@ typedef struct cpu_context {
     struct task* idle_task;
 
     // Runqueue 
-    spinlock_t rq_lock;
+    spinlock_t   rq_lock;
     struct task* rq_head[PRIORITY_LEVELS];
     struct task* rq_tail[PRIORITY_LEVELS];
     uint32_t rq_count[PRIORITY_LEVELS];
@@ -85,10 +85,11 @@ typedef struct cpu_context {
 extern cpu_context_t* cpu_table[32];
 
 /* 
- * Initialization of BSP and SYSCALLS 
+ * Initialization of BSP, SYSCALLS and per-CPU context
  */
 void cpu_init_bsp();
 void cpu_init_syscalls();
+void cpu_init_context(cpu_context_t* ctx);
 
 static inline cpu_context_t* get_cpu() {
     cpu_context_t* ptr;
@@ -148,25 +149,6 @@ static inline void write_msr(uint32_t msr, uint64_t value) {
         : "a"(low), "d"(high), "c"(msr)
         : "memory"
     );
-}
-
-static inline void cpu_init_context(cpu_context_t* ctx) {
-    ctx->self = ctx;
-    for (int i = 0; i < PRIORITY_LEVELS; i++) {
-        ctx->rq_head[i]  = NULL;
-        ctx->rq_tail[i]  = NULL;
-        ctx->rq_count[i] = 0;
-        ctx->current_quanta[i] = 0;
-    }
-    ctx->rq_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
-    ctx->sleep_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
-    uint64_t addr = (uintptr_t)ctx;
-    
-    // MSR_GS_BASE (0xC0000101)
-    write_msr(0xC0000101, addr);
-
-    // MSR_KERNEL_GS_BASE (0xC0000102)
-    write_msr(0xC0000102, addr);
 }
 
 static inline void cpu_register_context(cpu_context_t* ctx) {

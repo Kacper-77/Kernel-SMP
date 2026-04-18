@@ -4,9 +4,25 @@
 #include <gdt.h>
 #include <std_funcs.h>
 
-/*
- * INIT BSP - most important at start
- */
+void cpu_init_context(cpu_context_t* ctx) {
+    ctx->self = ctx;
+    for (int i = 0; i < PRIORITY_LEVELS; i++) {
+        ctx->rq_head[i]  = NULL;
+        ctx->rq_tail[i]  = NULL;
+        ctx->rq_count[i] = 0;
+        ctx->current_quanta[i] = 0;
+    }
+    ctx->rq_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
+    ctx->sleep_lock = (spinlock_t){ .ticket = 0, .current = 0, .last_cpu = -1 };
+    uint64_t addr = (uintptr_t)ctx;
+    
+    // MSR_GS_BASE (0xC0000101)
+    write_msr(0xC0000101, addr);
+
+    // MSR_KERNEL_GS_BASE (0xC0000102)
+    write_msr(0xC0000102, addr);
+}
+
 void cpu_init_bsp() {
     // 1. Alloc context
     cpu_context_t* ctx = (cpu_context_t*)phys_to_virt((uintptr_t)pmm_alloc_frame());
@@ -18,7 +34,7 @@ void cpu_init_bsp() {
     cpu_register_context(ctx);
     ctx->pmm_last_index = 0;
 
-    // 3. Stack
+    // 3. Kernel Stack
     void* stack = pmm_alloc_frames(4); // 16KB
     ctx->kernel_stack = (uintptr_t)phys_to_virt((uintptr_t)stack + (4 * PAGE_SIZE));
 
