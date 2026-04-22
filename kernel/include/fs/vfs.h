@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <mutex.h>
-#include <spinlock.h>
+
+#include <atomic.h>
 
 /* Node types */
 #define VFS_FILE        0x01
