@@ -92,7 +92,7 @@ void vma_init_task(struct task* t) {
         .count = 1,
         .wait_lock = { .ticket = 0, .current = 0, .last_cpu = -1 },
         .wait_list = NULL,
-        .owner = NULL
+        .owner     = NULL
     };
 }
 

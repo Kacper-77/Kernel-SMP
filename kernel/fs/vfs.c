@@ -17,8 +17,13 @@ void vfs_init() {
     strcpy(vfs_root->name, "/");
     vfs_root->flags = VFS_DIRECTORY;
     
-    // Initialize root mutex: count=1 indicates the lock is available
-    vfs_root->lock = (mutex_t){ .count = { .counter = 1 } };
+    // Initialize root mutex
+    vfs_root->lock = (mutex_t){
+        .count     = 1,
+        .wait_lock = { .ticket = 0, .current = 0, .last_cpu = -1 },
+        .wait_list = NULL,
+        .owner     = NULL
+    };
 }
 
 vfs_node_t* vfs_get_root() {
