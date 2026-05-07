@@ -5,6 +5,7 @@
 #include <cpu.h>
 #include <atomic.h>
 #include <vma.h>
+#include <vfs.h>
 #include <sched_utils.h>
 
 #include <stdint.h>
@@ -59,5 +60,6 @@ task_t* sched_get_current();
 task_t* arch_task_create(void (*entry_point)(void));
 task_t* arch_task_create_user(void (*entry_point)(void));
 task_t* arch_task_spawn_elf(void* elf_raw_data);
+task_t* arch_task_spawn_vfs(vfs_node_t* node);
 
 #endif

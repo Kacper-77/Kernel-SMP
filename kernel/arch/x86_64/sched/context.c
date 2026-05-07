@@ -189,3 +189,37 @@ task_t* arch_task_spawn_elf(void* elf_raw_data) {
 
     return t;
 }
+
+task_t* arch_task_spawn_vfs(vfs_node_t* node) {
+    task_t* t = task_alloc_base();
+    if (!t) return NULL;
+
+    uintptr_t cr3 = vmm_create_user_pml4();
+    if (!cr3) { kfree((void*)t->stack_base); kfree(t); return NULL; }
+    t->cr3 = cr3;
+    t->is_user = true;
+
+    uintptr_t entry = elf_load_vfs(t, node); 
+    if (!entry) {
+        // !!!
+        return NULL;
+    }
+
+    uintptr_t u_stack_virt = 0x00007FFFFFFFF000 - (4 * PAGE_SIZE);
+    uint64_t u_stack_size  = 4 * PAGE_SIZE;
+    vma_map(t, u_stack_virt, u_stack_size, VMA_READ | VMA_WRITE | VMA_USER | VMA_STACK);
+
+    uintptr_t kstack_top = (t->stack_base + t->stack_size) & ~0x0FULL;
+    interrupt_frame_t* frame = (interrupt_frame_t*)(kstack_top - sizeof(interrupt_frame_t));
+    memset(frame, 0, sizeof(interrupt_frame_t));
+
+    frame->rip    = entry;
+    frame->cs     = 0x1B;
+    frame->ss     = 0x23;
+    frame->rflags = 0x202;
+    frame->rsp    = u_stack_virt + u_stack_size - 8;
+    t->rsp = (uintptr_t)frame;
+
+    task_register(t);
+    return t;
+}
