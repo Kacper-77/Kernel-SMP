@@ -49,3 +49,32 @@ char* strncpy(char* dest, const char* src, size_t n) {
     }
     return dest;
 }
+
+static char* strchr(const char* s, int c) {
+    while (*s != (char)c) {
+        if (!*s++) return NULL;
+    }
+    return (char*)s;
+}
+
+char* strtok_r(char* str, const char* delim, char** saveptr) {
+    char* token;
+    if (str == NULL) str = *saveptr;
+
+    while (*str && strchr(delim, *str)) str++;
+    if (*str == '\0') {
+        *saveptr = str;
+        return NULL;
+    }
+
+    token = str;
+    while (*str && !strchr(delim, *str)) str++;
+    
+    if (*str) {
+        *str = '\0';
+        *saveptr = str + 1;
+    } else {
+        *saveptr = str;
+    }
+    return token;
+}

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <sched.h>
+#include <vfs.h>
 
 #define ELF_MAGIC 0x464C457F
 
@@ -12,5 +13,6 @@
 #define PF_R 4
 
 uintptr_t elf_load(task_t* t, void* elf_data);
+uintptr_t elf_load_vfs(task_t* t, vfs_node_t* node);
 
 #endif

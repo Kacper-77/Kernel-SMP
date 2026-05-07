@@ -22,6 +22,7 @@
 #include <io.h>
 #include <tar.h>
 #include <elf.h>
+#include <vfs.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -149,23 +150,45 @@ void kernel_main_high(BootInfo *bi) {
             kprintf("Address Virt: %p\n", ramdisk_vaddr);
             kprintf("Size:         %x bytes\n", bi->ramdisk.ramdisk_size);
 
-            size_t size = 0;
-            void* file = NULL;
+        //     size_t size = 0;
+        //     void* file = NULL;
 
-            file = tar_lookup("init.elf", &size);
-            if (!file) {
-                kprintf("Trying alternative path...\n");
-                file = tar_lookup("ramdisk/init.elf", &size);
-            }
+        //     file = tar_lookup("init.elf", &size);
+        //     if (!file) {
+        //         kprintf("Trying alternative path...\n");
+        //         file = tar_lookup("ramdisk/init.elf", &size);
+        //     }
 
-           if (file) {
-                kprintf("SUCCESS! Found init.elf at: %p Size: %x\n", file, size);
+        //    if (file) {
+        //         kprintf("SUCCESS! Found init.elf at: %p Size: %x\n", file, size);
                 
-                if (arch_task_spawn_elf(file)) {
-                    kprintf("Launching init.elf (TID will be assigned)...\n");
-                } else {
-                    kprintf("ERROR: Failed to spawn init.elf - check VMM or ELF header.\n");
+        //         if (arch_task_spawn_elf(file)) {
+        //             kprintf("Launching init.elf (TID will be assigned)...\n");
+        //         } else {
+        //             kprintf("ERROR: Failed to spawn init.elf - check VMM or ELF header.\n");
+        //         }
+        //     }
+
+            vfs_init();
+            tar_vfs_mount(ramdisk_vaddr, bi->ramdisk.ramdisk_size);
+
+            vfs_node_t* init_node = vfs_open("/init.elf", O_RDONLY);
+
+            if (init_node) {
+                kprintf("VFS: Found %s, size: %d bytes. Testing VFS_READ...\n", init_node->name, init_node->size);
+                
+                void* temp_elf_buffer = kmalloc(init_node->size);
+                if (temp_elf_buffer) {
+                    vfs_read(init_node, 0, init_node->size, temp_elf_buffer);
+                    
+                    kprintf("VFS: Data read successfully.\n");
+                    
+                    if (arch_task_spawn_elf(temp_elf_buffer)) {
+                        kprintf("SUCCESS: spawned via VFS layer!\n");
+                    }
                 }
+            } else {
+                panic("VFS: /init.elf not found!");
             }
 
             kprintf("Starting SMP initialization...\n");

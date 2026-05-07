@@ -8,6 +8,7 @@
 #include <kmalloc.h>
 #include <serial.h>
 #include <sched.h>
+#include <vfs.h>
 
 /*
  * Helper to copy data into the newly mapped VMA regions.
@@ -29,6 +30,26 @@ static void elf_copy_segment(task_t* t, uintptr_t vaddr, void* src, size_t files
 
         void* dest_virt = (void*)(phys_to_virt(dest_phys) + offset);
         memcpy(dest_virt, (uint8_t*)src + copied, to_copy);
+        
+        copied += to_copy;
+    }
+}
+
+static void elf_copy_segment_vfs(task_t* t, vfs_node_t* node, uintptr_t vaddr, uint64_t file_offset, size_t filesz) {
+    page_table_t* pml4_virt = vmm_get_table(t->cr3);
+    size_t copied = 0;
+
+    while (copied < filesz) {
+        uintptr_t curr_vaddr = vaddr + copied;
+        uintptr_t offset = curr_vaddr % PAGE_SIZE;
+        size_t to_copy = PAGE_SIZE - offset;
+        if (to_copy > (filesz - copied)) to_copy = filesz - copied;
+
+        uintptr_t dest_phys = vmm_virtual_to_physical(pml4_virt, curr_vaddr);
+        if (!dest_phys) return; 
+
+        void* dest_virt = (void*)(phys_to_virt(dest_phys) + offset);
+        vfs_read(node, file_offset + copied, to_copy, (uint8_t*)dest_virt);
         
         copied += to_copy;
     }
@@ -84,4 +105,44 @@ uintptr_t elf_load(task_t* t, void* elf_data) {
             VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP);
 
     return header->e_entry;
+}
+
+uintptr_t elf_load_vfs(task_t* t, vfs_node_t* node) {
+    Elf64_Ehdr header;
+    vfs_read(node, 0, sizeof(Elf64_Ehdr), (uint8_t*)&header);
+
+    if (memcmp(header.e_ident, "\x7F" "ELF", 4) != 0) return 0;
+
+    Elf64_Phdr* phdr_table = kmalloc(header.e_phnum * sizeof(Elf64_Phdr));
+    vfs_read(node, header.e_phoff, header.e_phnum * sizeof(Elf64_Phdr), (uint8_t*)phdr_table);
+
+    uintptr_t max_vaddr = 0;
+
+    for (int i = 0; i < header.e_phnum; i++) {
+        if (phdr_table[i].p_type == PT_LOAD) {
+            uint32_t vma_flags = VMA_USER;
+            if (phdr_table[i].p_flags & PF_R) vma_flags |= VMA_READ;
+            if (phdr_table[i].p_flags & PF_W) vma_flags |= VMA_WRITE;
+            if (phdr_table[i].p_flags & PF_X) vma_flags |= VMA_EXEC;
+
+            vma_map(t, phdr_table[i].p_vaddr, phdr_table[i].p_memsz, vma_flags);
+
+            if (phdr_table[i].p_filesz > 0) {
+                elf_copy_segment_vfs(t, node, phdr_table[i].p_vaddr, 
+                                     phdr_table[i].p_offset, phdr_table[i].p_filesz);
+            }
+
+            uintptr_t seg_end = phdr_table[i].p_vaddr + phdr_table[i].p_memsz;
+            if (seg_end > max_vaddr) max_vaddr = seg_end;
+        }
+    }
+
+    kfree(phdr_table);
+
+    t->heap_start = (max_vaddr + PAGE_SIZE) & ~(PAGE_SIZE - 1);
+    t->heap_curr  = t->heap_start;
+    t->heap_end   = t->heap_start + 4 * PAGE_SIZE;
+    vma_map(t, t->heap_start, 4 * PAGE_SIZE, VMA_READ | VMA_WRITE | VMA_USER | VMA_HEAP);
+
+    return header.e_entry;
 }

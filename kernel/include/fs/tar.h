@@ -26,4 +26,6 @@ typedef struct {
 void tar_init(void* address, size_t size);
 void* tar_lookup(const char* filename, size_t* out_size);
 
+void tar_vfs_mount(void* address, size_t size);
+
 #endif
