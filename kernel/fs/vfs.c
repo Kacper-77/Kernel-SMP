@@ -30,7 +30,6 @@ vfs_node_t* vfs_get_root() {
     return vfs_root;
 }
 
-
 /*
  * Resolves a path to a VFS node using the "Lock Crawling" (Hand-over-Hand) technique.
  * This ensures SMP safety by locking the current directory before acquiring the next,
@@ -73,10 +72,8 @@ static vfs_node_t* vfs_find_path(const char* path) {
             mutex_unlock(&current->lock);
             return NULL;
         }
-
         token = strtok_r(NULL, "/", &saveptr);
     }
-
     return current;
 }
 
@@ -84,12 +81,8 @@ static vfs_node_t* vfs_find_path(const char* path) {
  * Opens a file by resolving its path and executing the driver-specific open routine.
  */
 vfs_node_t* vfs_open(const char* path, uint32_t flags) {
+    (void)flags;
     vfs_node_t* node = vfs_find_path(path);
-    
-    if (node && node->ops && node->ops->open) {
-        node->ops->open(node, flags);
-    }
-    
     return node;
 }
 

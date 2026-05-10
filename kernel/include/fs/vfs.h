@@ -24,7 +24,7 @@
 
 struct vfs_node;
 
-// V-Table
+/* V-Table */
 typedef struct vfs_ops {
     uint32_t (*read)(struct vfs_node* node, uint64_t offset, uint32_t size, uint8_t* buffer);
     uint32_t (*write)(struct vfs_node* node, uint64_t offset, uint32_t size, uint8_t* buffer);
@@ -35,8 +35,8 @@ typedef struct vfs_ops {
     struct vfs_dirent* (*readdir)(struct vfs_node* node, uint32_t index);
     
     // !!!
-    int (*mkdir)(struct vfs_node* node, const char* name, uint16_t mode);
-    int (*create)(struct vfs_node* node, const char* name, uint16_t mode);
+    // int (*mkdir)(struct vfs_node* node, const char* name, uint16_t mode);
+    // int (*create)(struct vfs_node* node, const char* name, uint16_t mode);
 } vfs_ops_t;
 
 typedef struct vfs_dirent {

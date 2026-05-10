@@ -92,7 +92,7 @@ void tar_vfs_mount(void* address, size_t size) {
     root_priv->first_child = NULL;
     tar_root->private_data = root_priv;
 
-    tar_root->lock = (mutex_t){.count = 1, .wait_lock = {.last_cpu = -1}};
+    tar_root->lock = (mutex_t){ .count = 1, .wait_lock = { .last_cpu = -1 } };
 
     tar_header_t* header = (tar_header_t*)address;
     uintptr_t end = (uintptr_t)address + size;
@@ -130,6 +130,5 @@ void tar_vfs_mount(void* address, size_t size) {
             header = (tar_header_t*)((uintptr_t)header + 512 + ((f_size + 511) & ~511));
         } else break;
     }
-
     vfs_mount("/", tar_root);
 }
