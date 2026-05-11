@@ -107,6 +107,13 @@ uintptr_t elf_load(task_t* t, void* elf_data) {
     return header->e_entry;
 }
 
+/*
+ * Loads an ELF64 executable from VFS into a task's virtual address space.
+ * It parses Program Headers, maps required memory segments (PT_LOAD), 
+ * and copies the binary data from the VFS node to the allocated regions.
+ * Also initializes the process heap right after the last loaded segment.
+ * Returns the entry point address (e_entry) to be used as the starting RIP.
+ */
 uintptr_t elf_load_vfs(task_t* t, vfs_node_t* node) {
     Elf64_Ehdr header;
     vfs_read(node, 0, sizeof(Elf64_Ehdr), (uint8_t*)&header);

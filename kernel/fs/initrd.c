@@ -80,6 +80,12 @@ static vfs_ops_t tar_ops = {
     .write = NULL, // RAMdisk read only
 };
 
+/*
+ * Scans the USTAR ramdisk in memory and builds the initial VFS tree.
+ * Instead of copying data, it maps each vfs_node_t directly to the 
+ * file's location within the tarball (at header + 512 bytes).
+ * This provides a fast, zero-copy read-only filesystem at boot.
+ */
 void tar_vfs_mount(void* address, size_t size) {
     vfs_node_t* tar_root = (vfs_node_t*)kmalloc(sizeof(vfs_node_t));
     memset(tar_root, 0, sizeof(vfs_node_t));
@@ -112,7 +118,7 @@ void tar_vfs_mount(void* address, size_t size) {
             node->flags = (header->typeflag == '5') ? VFS_DIRECTORY : VFS_FILE;
             node->ops = &tar_ops;
             
-            node->lock = (mutex_t){.count = 1, .wait_lock = {.last_cpu = -1}};
+            node->lock = (mutex_t){ .count = 1, .wait_lock = { .last_cpu = -1 } };
 
             if (node->flags == VFS_FILE) {
                 node->private_data = (void*)((uintptr_t)header + 512);
