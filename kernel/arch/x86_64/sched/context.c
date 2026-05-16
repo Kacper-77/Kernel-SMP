@@ -201,7 +201,7 @@ task_t* arch_task_spawn_vfs(vfs_node_t* node) {
 
     uintptr_t entry = elf_load_vfs(t, node); 
     if (!entry) {
-        // !!!
+        vma_unmap(t, t->heap_start, 4 * PAGE_SIZE);
         return NULL;
     }
 
