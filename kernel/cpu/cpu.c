@@ -4,6 +4,12 @@
 #include <gdt.h>
 #include <std_funcs.h>
 
+extern uint8_t cpu_count;
+
+uint8_t get_cpu_count() {
+    return cpu_count;
+}
+
 void cpu_init_context(cpu_context_t* ctx) {
     ctx->self = ctx;
     for (int i = 0; i < PRIORITY_LEVELS; i++) {

@@ -82,7 +82,7 @@ typedef struct cpu_context {
     struct task* sleeping_list;
 } cpu_context_t;
 
-extern cpu_context_t* cpu_table[32];
+extern cpu_context_t* cpu_table[128];
 
 /* 
  * Initialization of BSP, SYSCALLS and per-CPU context
@@ -156,7 +156,6 @@ static inline void cpu_register_context(cpu_context_t* ctx) {
 }
 
 static inline cpu_context_t* get_cpu_by_id(uint64_t id) {
-    if (id >= 32) return NULL;
     return cpu_table[id];
 }
 
@@ -199,5 +198,7 @@ static inline void cpu_flush_tlb() {
     __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
     __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
 }
+
+uint8_t get_cpu_count();
 
 #endif

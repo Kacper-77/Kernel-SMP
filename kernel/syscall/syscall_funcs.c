@@ -179,7 +179,7 @@ uint64_t sys_get_tid_handler(interrupt_frame_t* frame) {
 
 uint64_t sys_cpu_count_handler(interrupt_frame_t* frame) {
     (void)frame;
-    return (uint64_t)get_cpu_count_test();
+    return (uint64_t)get_cpu_count();
 }
 
 /*

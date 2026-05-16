@@ -389,7 +389,7 @@ uint64_t schedule(interrupt_frame_t* frame) {
 
     // 2. Load Balancing: Attempt to steal from other cores if idle
     if (!scheduled_next) {
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < get_cpu_count(); i++) {
             cpu_context_t* other = get_cpu_by_id(i);
             if (!other || other == cpu) continue;
 

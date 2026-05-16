@@ -20,8 +20,8 @@ BootInfo* g_bi = NULL;
 extern uint8_t trampoline_start[];
 extern uint8_t trampoline_end[];
 
-static uint64_t cpu_count = 1;
-cpu_context_t* cpu_table[32] = { 0 };
+uint64_t cpu_count = 1;
+cpu_context_t* cpu_table[128] = { 0 };
 
 static void user_test_task_ap() {
     char msg[] = "\nRING 3 AP AP AP AP AP\n";
@@ -171,8 +171,4 @@ void boot_ap(uint32_t apic_id, uint8_t vector) {
 
     lapic_wait_for_delivery();
     msleep(1);
-}
-
-uint8_t get_cpu_count_test() {
-    return cpu_count;
 }
