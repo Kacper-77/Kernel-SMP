@@ -15,6 +15,8 @@ typedef struct {
     uint32_t green_mask;
     uint32_t blue_mask;
     uint32_t reserved_mask;
+    uint32_t cursor_x;
+    uint32_t cursor_y;
 } __attribute__((packed)) BootFramebuffer;
 
 typedef struct {

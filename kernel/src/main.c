@@ -32,6 +32,16 @@ int g_lock_enabled = 0;
 
 syscall_ptr_t sys_table[20] = { 0 };
 
+void fb_clear_screen(BootInfo *bi, uint32_t color) {
+    uint32_t* fb = (uint32_t*)(uintptr_t)bi->fb.framebuffer_base;
+    
+    size_t total_pixels = bi->fb.pixels_per_scanline * bi->fb.height;
+    
+    for (size_t i = 0; i < total_pixels; i++) {
+        fb[i] = color;
+    }
+}
+
 void kernel_main_high(BootInfo *bi);
 
 static void task_a() {
@@ -85,6 +95,8 @@ void kernel_main_high(BootInfo *bi) {
     init_sys_table();
     
     idt_init();
+
+    fb_clear_screen(bi, 0x00151515);
 
     kprintf("###   Greetings from Higher Half!   ###\n");
     

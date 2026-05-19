@@ -26,6 +26,8 @@ EFI_STATUS init_gop(BootFramebuffer *fb) {
     fb->green_mask     = info->PixelInformation.GreenMask;
     fb->blue_mask      = info->PixelInformation.BlueMask;
     fb->reserved_mask  = info->PixelInformation.ReservedMask;
+    fb->cursor_x       = 0;
+    fb->cursor_y       = 0;
 
     boot_log(L"[GOP] Graphics Output Protocol OK");
 
